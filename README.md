@@ -35,7 +35,7 @@ Build interactive node graphs, mind maps, workflow editors, and data pipelines i
 ## Quick Start
 
 ```rust
-use gpui::*;
+use gpui_kit::gpui::*;
 use gpui_flow::*;
 
 // Create nodes

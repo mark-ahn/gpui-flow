@@ -1,4 +1,4 @@
-use gpui::{Pixels, SharedString};
+use gpui_kit::gpui::{Pixels, SharedString};
 
 /// Unique identifier for a node.
 pub type NodeId = SharedString;
@@ -162,8 +162,8 @@ impl FlowNode {
     /// Set initial estimated size (width, height in pixels).
     /// Used for edge positioning before the node is rendered and measured.
     pub fn size(mut self, width: f32, height: f32) -> Self {
-        self.measured_width = Some(gpui::px(width));
-        self.measured_height = Some(gpui::px(height));
+        self.measured_width = Some(gpui_kit::gpui::px(width));
+        self.measured_height = Some(gpui_kit::gpui::px(height));
         self
     }
 
@@ -271,10 +271,7 @@ impl Default for Viewport {
 impl Viewport {
     /// Convert a point from flow coordinates to screen coordinates.
     pub fn flow_to_screen(&self, point: FlowPoint) -> (f32, f32) {
-        (
-            point.x * self.zoom + self.x,
-            point.y * self.zoom + self.y,
-        )
+        (point.x * self.zoom + self.x, point.y * self.zoom + self.y)
     }
 
     /// Convert a point from screen coordinates to flow coordinates.
@@ -373,11 +370,6 @@ pub enum NodeChange {
 /// Change events for edges.
 #[derive(Debug, Clone)]
 pub enum EdgeChange {
-    Select {
-        id: EdgeId,
-        selected: bool,
-    },
-    Remove {
-        id: EdgeId,
-    },
+    Select { id: EdgeId, selected: bool },
+    Remove { id: EdgeId },
 }

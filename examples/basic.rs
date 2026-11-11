@@ -1,7 +1,5 @@
-use std::rc::Rc;
-
-use gpui::*;
 use gpui_flow::*;
+use gpui_kit::gpui::*;
 
 // Vercel/shadcn palette
 const BG: u32 = 0x09090b;
@@ -57,11 +55,7 @@ fn node_text(node: &FlowNode) -> String {
 }
 
 /// Render node with a colored left accent bar.
-fn render_node_with_accent(
-    node: &FlowNode,
-    accent: u32,
-    type_label: &str,
-) -> AnyElement {
+fn render_node_with_accent(node: &FlowNode, accent: u32, type_label: &str) -> AnyElement {
     div()
         .flex()
         .flex_row()
@@ -119,8 +113,9 @@ fn render_sink(node: &FlowNode, _w: &mut Window, _cx: &mut App) -> AnyElement {
 }
 
 fn main() {
-    Application::with_platform(Rc::new(gpui_macos::MacPlatform::new(false))).run(
-        move |cx: &mut App| {
+    gpui_kit::application()
+        // Application::with_platform(Rc::new(gpui_macos::MacPlatform::new(false)))
+        .run(move |cx: &mut App| {
             let bounds = Bounds::centered(None, size(px(1100.0), px(750.0)), cx);
 
             cx.open_window(
@@ -193,19 +188,26 @@ fn main() {
 
                     let edges = vec![
                         FlowEdge::new("e1", "webhook", "auth")
-                            .color(ACCENT_AMBER).stroke_width(2.0),
+                            .color(ACCENT_AMBER)
+                            .stroke_width(2.0),
                         FlowEdge::new("e2", "schedule", "transform")
-                            .color(ACCENT_AMBER).stroke_width(2.0),
+                            .color(ACCENT_AMBER)
+                            .stroke_width(2.0),
                         FlowEdge::new("e3", "auth", "db")
-                            .color(ACCENT_BLUE).stroke_width(2.0),
+                            .color(ACCENT_BLUE)
+                            .stroke_width(2.0),
                         FlowEdge::new("e4", "auth", "transform")
-                            .color(ACCENT_BLUE).stroke_width(1.5),
+                            .color(ACCENT_BLUE)
+                            .stroke_width(1.5),
                         FlowEdge::new("e5", "transform", "cache")
-                            .color(ACCENT_BLUE).stroke_width(2.0),
+                            .color(ACCENT_BLUE)
+                            .stroke_width(2.0),
                         FlowEdge::new("e6", "config", "validate")
-                            .color(ACCENT_EMERALD).stroke_width(2.0),
+                            .color(ACCENT_EMERALD)
+                            .stroke_width(2.0),
                         FlowEdge::new("e7", "validate", "queue")
-                            .color(ACCENT_VIOLET).stroke_width(2.0),
+                            .color(ACCENT_VIOLET)
+                            .stroke_width(2.0),
                     ];
 
                     let state = cx.new(|_| FlowState::new(nodes, edges));
@@ -226,8 +228,7 @@ fn main() {
 
                     let minimap =
                         cx.new(|_| Minimap::new(state.clone()).container_bounds(1100.0, 750.0));
-                    let controls =
-                        cx.new(|_| Controls::new(state).container_size(1100.0, 750.0));
+                    let controls = cx.new(|_| Controls::new(state).container_size(1100.0, 750.0));
 
                     cx.new(|_| FlowExample {
                         flow,
@@ -237,6 +238,5 @@ fn main() {
                 },
             )
             .expect("Failed to open window");
-        },
-    );
+        });
 }

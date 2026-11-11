@@ -1,10 +1,8 @@
 //! Stress test: 1000 nodes, incremental random edge additions.
 //! Press Space to play/pause. Clean monochromatic dark UI.
 
-use std::rc::Rc;
-
-use gpui::*;
 use gpui_flow::*;
+use gpui_kit::gpui::*;
 
 const NODE_COUNT: usize = 1000;
 const EDGES_PER_TICK: usize = 5;
@@ -54,7 +52,13 @@ impl StressApp {
         }
 
         let count = EDGES_PER_TICK.min(MAX_EDGES - self.edges_added);
-        let colors = [ACCENT_BLUE, ACCENT_EMERALD, ACCENT_VIOLET, ACCENT_AMBER, ACCENT_ROSE];
+        let colors = [
+            ACCENT_BLUE,
+            ACCENT_EMERALD,
+            ACCENT_VIOLET,
+            ACCENT_AMBER,
+            ACCENT_ROSE,
+        ];
 
         let mut randoms = Vec::with_capacity(count * 3);
         for _ in 0..(count * 3) {
@@ -137,12 +141,8 @@ impl Render for StressApp {
                     .text_color(gpui::rgb(TEXT_MUTED))
                     .child(format!(
                         "{} nodes  {}  edges  {}  +{}/{}",
-                        node_count,
-                        "\u{00b7}",
-                        edge_count,
-                        self.edges_added,
-                        MAX_EDGES,
-                    ))
+                        node_count, "\u{00b7}", edge_count, self.edges_added, MAX_EDGES,
+                    )),
             )
             // Status pill top-left
             .child(
@@ -219,8 +219,9 @@ fn render_stress_node(node: &FlowNode, _window: &mut Window, _cx: &mut App) -> A
 }
 
 fn main() {
-    Application::with_platform(Rc::new(gpui_macos::MacPlatform::new(false))).run(
-        move |cx: &mut App| {
+    gpui_kit::application()
+        // Application::with_platform(Rc::new(gpui_macos::MacPlatform::new(false)))
+        .run(move |cx: &mut App| {
             let bounds = Bounds::centered(None, size(px(1400.0), px(900.0)), cx);
 
             cx.open_window(
@@ -292,6 +293,5 @@ fn main() {
                 },
             )
             .expect("Failed to open window");
-        },
-    );
+        });
 }

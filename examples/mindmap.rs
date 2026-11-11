@@ -1,9 +1,8 @@
-use std::rc::Rc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use gpui::*;
 use gpui::prelude::FluentBuilder;
 use gpui_flow::*;
+use gpui_kit::gpui::*;
 
 static NEXT_ID: AtomicU32 = AtomicU32::new(100);
 
@@ -214,11 +213,7 @@ fn add_child_to_selected(state: &Entity<FlowState>, color: u32, cx: &mut App) {
         };
         state.push_undo();
         let child_id: SharedString = next_id().into();
-        let child_count = state
-            .edges
-            .iter()
-            .filter(|e| e.source == parent.id)
-            .count() as f32;
+        let child_count = state.edges.iter().filter(|e| e.source == parent.id).count() as f32;
         let x = parent.position.x + 250.0;
         let y = parent.position.y + child_count * 60.0 - 20.0;
         let child = FlowNode::new(child_id.clone(), x, y)
@@ -322,8 +317,9 @@ fn node_label(node: &FlowNode) -> String {
 }
 
 fn main() {
-    Application::with_platform(Rc::new(gpui_macos::MacPlatform::new(false))).run(
-        move |cx: &mut App| {
+    gpui_kit::application()
+        // Application::with_platform(Rc::new(gpui_macos::MacPlatform::new(false)))
+        .run(move |cx: &mut App| {
             let bounds = Bounds::centered(None, size(px(1200.0), px(800.0)), cx);
 
             cx.open_window(
@@ -401,18 +397,42 @@ fn main() {
                     ];
 
                     let edges = vec![
-                        FlowEdge::new("e-r-g", "root", "groceries").color(ORANGE).stroke_width(3.0),
-                        FlowEdge::new("e-r-e", "root", "errands").color(BLUE).stroke_width(3.0),
-                        FlowEdge::new("e-r-p", "root", "projects").color(GREEN).stroke_width(3.0),
-                        FlowEdge::new("e-g-1", "groceries", "g1").color(ORANGE).stroke_width(2.0),
-                        FlowEdge::new("e-g-2", "groceries", "g2").color(ORANGE).stroke_width(2.0),
-                        FlowEdge::new("e-g-3", "groceries", "g3").color(ORANGE).stroke_width(2.0),
-                        FlowEdge::new("e-g-4", "groceries", "g4").color(ORANGE).stroke_width(2.0),
-                        FlowEdge::new("e-e-1", "errands", "e1").color(BLUE).stroke_width(2.0),
-                        FlowEdge::new("e-e-2", "errands", "e2").color(BLUE).stroke_width(2.0),
-                        FlowEdge::new("e-e-3", "errands", "e3").color(BLUE).stroke_width(2.0),
-                        FlowEdge::new("e-p-1", "projects", "p1").color(GREEN).stroke_width(2.0),
-                        FlowEdge::new("e-p-2", "projects", "p2").color(GREEN).stroke_width(2.0),
+                        FlowEdge::new("e-r-g", "root", "groceries")
+                            .color(ORANGE)
+                            .stroke_width(3.0),
+                        FlowEdge::new("e-r-e", "root", "errands")
+                            .color(BLUE)
+                            .stroke_width(3.0),
+                        FlowEdge::new("e-r-p", "root", "projects")
+                            .color(GREEN)
+                            .stroke_width(3.0),
+                        FlowEdge::new("e-g-1", "groceries", "g1")
+                            .color(ORANGE)
+                            .stroke_width(2.0),
+                        FlowEdge::new("e-g-2", "groceries", "g2")
+                            .color(ORANGE)
+                            .stroke_width(2.0),
+                        FlowEdge::new("e-g-3", "groceries", "g3")
+                            .color(ORANGE)
+                            .stroke_width(2.0),
+                        FlowEdge::new("e-g-4", "groceries", "g4")
+                            .color(ORANGE)
+                            .stroke_width(2.0),
+                        FlowEdge::new("e-e-1", "errands", "e1")
+                            .color(BLUE)
+                            .stroke_width(2.0),
+                        FlowEdge::new("e-e-2", "errands", "e2")
+                            .color(BLUE)
+                            .stroke_width(2.0),
+                        FlowEdge::new("e-e-3", "errands", "e3")
+                            .color(BLUE)
+                            .stroke_width(2.0),
+                        FlowEdge::new("e-p-1", "projects", "p1")
+                            .color(GREEN)
+                            .stroke_width(2.0),
+                        FlowEdge::new("e-p-2", "projects", "p2")
+                            .color(GREEN)
+                            .stroke_width(2.0),
                     ];
 
                     let state = cx.new(|_| FlowState::new(nodes, edges));
@@ -441,6 +461,5 @@ fn main() {
                 },
             )
             .expect("Failed to open window");
-        },
-    );
+        });
 }
