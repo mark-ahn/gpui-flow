@@ -11,7 +11,9 @@ keywords = ["gpui", "flow", "graph", "node-editor", "react-flow"]
 categories = ["gui", "graphics"]
 
 [dependencies]
-gpui-kit = { version = "0.9.1" }
+gpui-kit = { version = "0.9.1", features = [
+	# "gpui-fast"
+] }
 
 [dev-dependencies]
 # gpui_macos = { git = "https://github.com/zed-industries/zed", package = "gpui_macos", features = ["font-kit"] }
