@@ -26,6 +26,9 @@ impl Render for FlowExample {
             .size_full()
             .relative()
             .bg(gpui::rgb(BG))
+            .pt_20()
+            .text_color(rgba(0xffffffff))
+            .child("some-label")
             .child(self.flow.clone())
             // Controls bottom-left
             .child(

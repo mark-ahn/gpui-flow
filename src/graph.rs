@@ -551,9 +551,11 @@ impl FlowGraph {
     }
 
     /// Paint a selection box rectangle.
-    fn paint_selection_box(sel: &SelectionBox, window: &mut Window) {
-        let x = sel.start.0.min(sel.current.0);
-        let y = sel.start.1.min(sel.current.1);
+    fn paint_selection_box(bounds: &Bounds<Pixels>, sel: &SelectionBox, window: &mut Window) {
+        let (x_delta, y_delta) = (bounds.origin.x.as_f32(), bounds.origin.y.as_f32());
+
+        let x = sel.start.0.min(sel.current.0) + x_delta;
+        let y = sel.start.1.min(sel.current.1) + y_delta;
         let w = (sel.start.0 - sel.current.0).abs();
         let h = (sel.start.1 - sel.current.1).abs();
 
@@ -613,10 +615,21 @@ impl FlowGraph {
     }
 
     /// Paint a draft connection line from handle to mouse cursor.
-    fn paint_connection_draft(draft: &ConnectionDraft, window: &mut Window) {
+    fn paint_connection_draft(
+        bounds: &Bounds<Pixels>,
+        draft: &ConnectionDraft,
+        window: &mut Window,
+    ) {
         let color: Background = gpui::rgba(0x3b82f680).into();
-        let (sx, sy) = draft.from_point;
-        let (tx, ty) = draft.to_point;
+        let (x_delta, y_delta) = (bounds.origin.x.as_f32(), bounds.origin.y.as_f32());
+        let (sx, sy) = {
+            let (x, y) = draft.from_point;
+            (x + x_delta, y + y_delta)
+        };
+        let (tx, ty) = {
+            let (x, y) = draft.to_point;
+            (x, y)
+        };
 
         let mut builder = PathBuilder::stroke(px(2.0));
         builder.move_to(Point::new(px(sx), px(sy)));
@@ -795,16 +808,16 @@ impl Render for FlowGraph {
                             window,
                         );
                         let state = state_for_canvas.read(cx);
-                        edges::paint_edges(state, window);
+                        edges::paint_edges(&bounds, state, window);
 
                         // Paint draft connection line
                         if let Some(ref draft) = connecting_draft {
-                            Self::paint_connection_draft(draft, window);
+                            Self::paint_connection_draft(&bounds, draft, window);
                         }
 
                         // Paint selection box
                         if let Some(ref sel) = selection_box {
-                            Self::paint_selection_box(sel, window);
+                            Self::paint_selection_box(&bounds, sel, window);
                         }
                     },
                 )

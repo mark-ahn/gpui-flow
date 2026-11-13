@@ -2,7 +2,7 @@ pub mod bezier;
 pub mod smooth_step;
 pub mod straight;
 
-use gpui_kit::gpui::{Background, PathBuilder, Point, SharedString, Window, px};
+use gpui_kit::gpui::{Background, Bounds, PathBuilder, Pixels, Point, SharedString, Window, px};
 
 use crate::store::FlowState;
 use crate::types::Viewport;
@@ -15,7 +15,7 @@ use self::straight::get_straight_path;
 const ARROW_SIZE: f32 = 6.0;
 
 /// Paint all edges for the flow graph.
-pub fn paint_edges(state: &FlowState, window: &mut Window) {
+pub fn paint_edges(bounds: &Bounds<Pixels>, state: &FlowState, window: &mut Window) {
     // Viewport culling bounds
     let win_size = window.viewport_size();
     let win_w = win_size.width.as_f32();
@@ -23,6 +23,8 @@ pub fn paint_edges(state: &FlowState, window: &mut Window) {
     let margin = 100.0;
     let edge_color: Background = gpui_kit::gpui::rgb(0xb1b1b7).into();
     let selected_color: Background = gpui_kit::gpui::rgb(0x555555).into();
+
+    let (x_delta, y_delta) = (bounds.origin.x.as_f32(), bounds.origin.y.as_f32());
 
     for edge in &state.edges {
         if edge.hidden {
@@ -45,8 +47,16 @@ pub fn paint_edges(state: &FlowState, window: &mut Window) {
         let target_handle_pos =
             find_handle_position(target_node, &edge.target_handle, HandleType::Target);
 
-        let (sx, sy) = handle_center_from_node(source_node, source_handle_pos, &state.viewport);
-        let (tx, ty) = handle_center_from_node(target_node, target_handle_pos, &state.viewport);
+        let (sx, sy) = {
+            let (x, y) = handle_center_from_node(source_node, source_handle_pos, &state.viewport);
+            (x + x_delta, y + y_delta)
+        };
+        let (tx, ty) = {
+            let (x, y) = handle_center_from_node(target_node, target_handle_pos, &state.viewport);
+            (x + x_delta, y + y_delta)
+        };
+        // println!("sx={sx}, sy={sy}");
+        // println!("tx={tx}, ty={ty}");
 
         // Cull edges where both endpoints are off-screen
         let both_off_x =
