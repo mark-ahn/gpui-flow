@@ -19,14 +19,14 @@ pub type HandleKey = (NodeId, Option<SharedString>);
 
 /// A snapshot of the graph state for undo/redo.
 #[derive(Clone)]
-struct HistoryEntry {
-    nodes: Vec<FlowNode>,
+struct HistoryEntry<T: FlowDatum> {
+    nodes: Vec<FlowNode<T>>,
     edges: Vec<FlowEdge>,
 }
 
 /// The central state store for a flow graph. Wrapped in `Entity<FlowState>`.
-pub struct FlowState {
-    pub nodes: Vec<FlowNode>,
+pub struct FlowState<T: FlowDatum> {
+    pub nodes: Vec<FlowNode<T>>,
     pub edges: Vec<FlowEdge>,
     node_lookup: HashMap<NodeId, usize>,
     pub viewport: Viewport,
@@ -37,8 +37,8 @@ pub struct FlowState {
     pub connecting: Option<ConnectionDraft>,
     pub selection_box: Option<SelectionBox>,
     // Undo/redo
-    undo_stack: Vec<HistoryEntry>,
-    redo_stack: Vec<HistoryEntry>,
+    undo_stack: Vec<HistoryEntry<T>>,
+    redo_stack: Vec<HistoryEntry<T>>,
     // Config
     pub min_zoom: f32,
     pub max_zoom: f32,
@@ -47,8 +47,8 @@ pub struct FlowState {
     pub connection_radius: f32,
 }
 
-impl FlowState {
-    pub fn new(nodes: Vec<FlowNode>, edges: Vec<FlowEdge>) -> Self {
+impl<T: FlowDatum> FlowState<T> {
+    pub fn new(nodes: Vec<FlowNode<T>>, edges: Vec<FlowEdge>) -> Self {
         let mut node_lookup = HashMap::new();
         for (i, node) in nodes.iter().enumerate() {
             node_lookup.insert(node.id.clone(), i);
@@ -129,17 +129,17 @@ impl FlowState {
     }
 
     /// Get a node by ID.
-    pub fn get_node(&self, id: &NodeId) -> Option<&FlowNode> {
+    pub fn get_node(&self, id: &NodeId) -> Option<&FlowNode<T>> {
         self.node_lookup.get(id).map(|&i| &self.nodes[i])
     }
 
     /// Get a mutable node by ID.
-    pub fn get_node_mut(&mut self, id: &NodeId) -> Option<&mut FlowNode> {
+    pub fn get_node_mut(&mut self, id: &NodeId) -> Option<&mut FlowNode<T>> {
         self.node_lookup.get(id).map(|&i| &mut self.nodes[i])
     }
 
     /// Set all nodes, rebuilding the index.
-    pub fn set_nodes(&mut self, nodes: Vec<FlowNode>) {
+    pub fn set_nodes(&mut self, nodes: Vec<FlowNode<T>>) {
         self.nodes = nodes;
         self.rebuild_lookup();
     }
@@ -338,7 +338,7 @@ impl FlowState {
     }
 
     /// Get nodes that have edges pointing TO the given node.
-    pub fn get_incomers(&self, node_id: &NodeId) -> Vec<&FlowNode> {
+    pub fn get_incomers(&self, node_id: &NodeId) -> Vec<&FlowNode<T>> {
         self.edges
             .iter()
             .filter(|e| e.target == *node_id)
@@ -347,7 +347,7 @@ impl FlowState {
     }
 
     /// Get nodes that the given node has edges pointing TO.
-    pub fn get_outgoers(&self, node_id: &NodeId) -> Vec<&FlowNode> {
+    pub fn get_outgoers(&self, node_id: &NodeId) -> Vec<&FlowNode<T>> {
         self.edges
             .iter()
             .filter(|e| e.source == *node_id)

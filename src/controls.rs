@@ -1,17 +1,17 @@
 use gpui_kit::gpui::*;
 
-use crate::store::FlowState;
+use crate::{FlowDatum, store::FlowState};
 
 /// A controls panel with zoom +/-, fit-view, and lock buttons.
 ///
 /// Position this absolutely in a corner of your flow graph container.
-pub struct Controls {
-    state: Entity<FlowState>,
+pub struct Controls<T: FlowDatum> {
+    state: Entity<FlowState<T>>,
     container_size: (f32, f32),
 }
 
-impl Controls {
-    pub fn new(state: Entity<FlowState>) -> Self {
+impl<T: FlowDatum> Controls<T> {
+    pub fn new(state: Entity<FlowState<T>>) -> Self {
         Self {
             state,
             container_size: (900.0, 600.0),
@@ -25,7 +25,7 @@ impl Controls {
     }
 }
 
-impl Render for Controls {
+impl<T: FlowDatum> Render for Controls<T> {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let state_zoom_in = self.state.clone();
         let state_zoom_out = self.state.clone();

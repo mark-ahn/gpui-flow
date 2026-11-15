@@ -103,9 +103,13 @@ impl Default for EdgeType {
     }
 }
 
+trait_set::trait_set! {
+    pub trait FlowDatum = Clone+'static;
+}
+
 /// A node in the flow graph.
 #[derive(Debug, Clone)]
-pub struct FlowNode {
+pub struct FlowNode<T: FlowDatum> {
     pub id: NodeId,
     pub position: FlowPoint,
     pub node_type: Option<SharedString>,
@@ -121,9 +125,10 @@ pub struct FlowNode {
     pub z_index: i32,
     pub measured_width: Option<Pixels>,
     pub measured_height: Option<Pixels>,
+    pub datum: Option<T>,
 }
 
-impl FlowNode {
+impl<T: FlowDatum> FlowNode<T> {
     pub fn new(id: impl Into<SharedString>, x: f32, y: f32) -> Self {
         Self {
             id: id.into(),
@@ -141,6 +146,7 @@ impl FlowNode {
             z_index: 0,
             measured_width: None,
             measured_height: None,
+            datum: None,
         }
     }
 
@@ -169,6 +175,11 @@ impl FlowNode {
 
     pub fn z_index(mut self, z: i32) -> Self {
         self.z_index = z;
+        self
+    }
+
+    pub fn datum(mut self, datum: Option<T>) -> Self {
+        self.datum = datum;
         self
     }
 }

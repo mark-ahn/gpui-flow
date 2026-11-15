@@ -14,6 +14,7 @@ categories = ["gui", "graphics"]
 gpui-kit = { version = "0.9.1", features = [
 	# "gpui-fast"
 ] }
+trait-set = "0.5.0"
 
 [dev-dependencies]
 # gpui_macos = { git = "https://github.com/zed-industries/zed", package = "gpui_macos", features = ["font-kit"] }

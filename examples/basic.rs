@@ -14,10 +14,11 @@ const ACCENT_VIOLET: u32 = 0x8b5cf6;
 const ACCENT_AMBER: u32 = 0xf59e0b;
 const ACCENT_ROSE: u32 = 0xf43f5e;
 
+type NodeDatum = ();
 struct FlowExample {
-    flow: Entity<FlowGraph>,
-    minimap: Entity<Minimap>,
-    controls: Entity<Controls>,
+    flow: Entity<FlowGraph<NodeDatum>>,
+    minimap: Entity<Minimap<NodeDatum>>,
+    controls: Entity<Controls<NodeDatum>>,
 }
 
 impl Render for FlowExample {
@@ -49,7 +50,7 @@ impl Render for FlowExample {
     }
 }
 
-fn node_text(node: &FlowNode) -> String {
+fn node_text(node: &FlowNode<()>) -> String {
     if node.label.is_empty() {
         node.id.to_string()
     } else {
@@ -58,7 +59,7 @@ fn node_text(node: &FlowNode) -> String {
 }
 
 /// Render node with a colored left accent bar.
-fn render_node_with_accent(node: &FlowNode, accent: u32, type_label: &str) -> AnyElement {
+fn render_node_with_accent(node: &FlowNode<()>, accent: u32, type_label: &str) -> AnyElement {
     div()
         .flex()
         .flex_row()
@@ -95,23 +96,23 @@ fn render_node_with_accent(node: &FlowNode, accent: u32, type_label: &str) -> An
         .into_any_element()
 }
 
-fn render_input(node: &FlowNode, _w: &mut Window, _cx: &mut App) -> AnyElement {
+fn render_input(node: &FlowNode<NodeDatum>, _w: &mut Window, _cx: &mut App) -> AnyElement {
     render_node_with_accent(node, ACCENT_EMERALD, "Input")
 }
 
-fn render_process(node: &FlowNode, _w: &mut Window, _cx: &mut App) -> AnyElement {
+fn render_process(node: &FlowNode<NodeDatum>, _w: &mut Window, _cx: &mut App) -> AnyElement {
     render_node_with_accent(node, ACCENT_BLUE, "Process")
 }
 
-fn render_output(node: &FlowNode, _w: &mut Window, _cx: &mut App) -> AnyElement {
+fn render_output(node: &FlowNode<NodeDatum>, _w: &mut Window, _cx: &mut App) -> AnyElement {
     render_node_with_accent(node, ACCENT_VIOLET, "Output")
 }
 
-fn render_trigger(node: &FlowNode, _w: &mut Window, _cx: &mut App) -> AnyElement {
+fn render_trigger(node: &FlowNode<NodeDatum>, _w: &mut Window, _cx: &mut App) -> AnyElement {
     render_node_with_accent(node, ACCENT_AMBER, "Trigger")
 }
 
-fn render_sink(node: &FlowNode, _w: &mut Window, _cx: &mut App) -> AnyElement {
+fn render_sink(node: &FlowNode<NodeDatum>, _w: &mut Window, _cx: &mut App) -> AnyElement {
     render_node_with_accent(node, ACCENT_ROSE, "Sink")
 }
 

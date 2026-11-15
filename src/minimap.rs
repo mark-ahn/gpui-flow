@@ -1,6 +1,6 @@
 use gpui_kit::gpui::*;
 
-use crate::store::FlowState;
+use crate::{FlowDatum, store::FlowState};
 
 const MINIMAP_WIDTH: f32 = 200.0;
 const MINIMAP_HEIGHT: f32 = 140.0;
@@ -10,14 +10,14 @@ const MINIMAP_PADDING: f32 = 10.0;
 ///
 /// Renders a scaled-down view of all nodes and edges, with a rectangle
 /// indicating the current viewport. Click or drag on the minimap to pan.
-pub struct Minimap {
-    state: Entity<FlowState>,
+pub struct Minimap<T: FlowDatum> {
+    state: Entity<FlowState<T>>,
     /// Container bounds captured during rendering (for viewport calculations).
     container_bounds: Option<(f32, f32)>,
 }
 
-impl Minimap {
-    pub fn new(state: Entity<FlowState>) -> Self {
+impl<T: FlowDatum> Minimap<T> {
+    pub fn new(state: Entity<FlowState<T>>) -> Self {
         Self {
             state,
             container_bounds: None,
@@ -31,7 +31,7 @@ impl Minimap {
     }
 }
 
-impl Render for Minimap {
+impl<T: FlowDatum> Render for Minimap<T> {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let state_for_canvas = self.state.clone();
         let state_for_mouse = self.state.clone();
@@ -83,8 +83,8 @@ impl Render for Minimap {
 }
 
 /// Pan the viewport so the center of the visible area aligns with the clicked minimap point.
-fn pan_to_minimap_point(
-    state: &Entity<FlowState>,
+fn pan_to_minimap_point<T: FlowDatum>(
+    state: &Entity<FlowState<T>>,
     mx: f32,
     my: f32,
     container: (f32, f32),
@@ -119,9 +119,9 @@ fn pan_to_minimap_point(
 }
 
 /// Paint the minimap contents.
-fn paint_minimap(
+fn paint_minimap<T: FlowDatum>(
     bounds: &Bounds<Pixels>,
-    state: &FlowState,
+    state: &FlowState<T>,
     container: (f32, f32),
     window: &mut Window,
 ) {
@@ -260,7 +260,7 @@ fn paint_minimap(
 
 /// Compute the bounding box of all nodes in flow coordinates.
 /// Returns ((min_x, min_y, width, height), has_nodes).
-fn compute_graph_bounds(state: &FlowState) -> ((f32, f32, f32, f32), bool) {
+fn compute_graph_bounds<T: FlowDatum>(state: &FlowState<T>) -> ((f32, f32, f32, f32), bool) {
     let mut min_x = f32::MAX;
     let mut min_y = f32::MAX;
     let mut max_x = f32::MIN;

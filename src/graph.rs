@@ -7,20 +7,20 @@ use crate::edges;
 use crate::store::FlowState;
 use crate::types::*;
 
-type NodeRendererFn = Box<dyn Fn(&FlowNode, &mut Window, &mut App) -> AnyElement>;
+type NodeRendererFn<T> = Box<dyn Fn(&FlowNode<T>, &mut Window, &mut App) -> AnyElement>;
 
 /// The top-level flow graph component.
 ///
 /// Renders nodes as positioned divs and edges via a canvas paint layer.
-pub struct FlowGraph {
-    state: Entity<FlowState>,
+pub struct FlowGraph<T: FlowDatum> {
+    state: Entity<FlowState<T>>,
     focus_handle: FocusHandle,
-    node_renderers: HashMap<SharedString, NodeRendererFn>,
-    default_renderer: Option<NodeRendererFn>,
+    node_renderers: HashMap<SharedString, NodeRendererFn<T>>,
+    default_renderer: Option<NodeRendererFn<T>>,
     /// Called when a new connection is completed.
-    on_connect: Option<Box<dyn Fn(&Connection, &mut FlowState)>>,
+    on_connect: Option<Box<dyn Fn(&Connection, &mut FlowState<T>)>>,
     /// Custom validation for connections. Return false to reject.
-    is_valid_connection: Option<Box<dyn Fn(&Connection, &FlowState) -> bool>>,
+    is_valid_connection: Option<Box<dyn Fn(&Connection, &FlowState<T>) -> bool>>,
     /// Whether to show the default node wrapper chrome (bg, border, shadow, padding).
     show_node_chrome: bool,
     /// Background color for the canvas (default: 0xf8f8f8).
@@ -37,8 +37,8 @@ pub struct FlowGraph {
     measured: bool,
 }
 
-impl FlowGraph {
-    pub fn new(state: Entity<FlowState>, cx: &mut Context<Self>) -> Self {
+impl<T: FlowDatum> FlowGraph<T> {
+    pub fn new(state: Entity<FlowState<T>>, cx: &mut Context<Self>) -> Self {
         Self {
             state,
             focus_handle: cx.focus_handle(),
@@ -60,7 +60,7 @@ impl FlowGraph {
     pub fn node_renderer(
         mut self,
         node_type: impl Into<SharedString>,
-        renderer: impl Fn(&FlowNode, &mut Window, &mut App) -> AnyElement + 'static,
+        renderer: impl Fn(&FlowNode<T>, &mut Window, &mut App) -> AnyElement + 'static,
     ) -> Self {
         self.node_renderers
             .insert(node_type.into(), Box::new(renderer));
@@ -70,14 +70,17 @@ impl FlowGraph {
     /// Set the default renderer for nodes without a specific type renderer.
     pub fn default_renderer(
         mut self,
-        renderer: impl Fn(&FlowNode, &mut Window, &mut App) -> AnyElement + 'static,
+        renderer: impl Fn(&FlowNode<T>, &mut Window, &mut App) -> AnyElement + 'static,
     ) -> Self {
         self.default_renderer = Some(Box::new(renderer));
         self
     }
 
     /// Set the on_connect callback.
-    pub fn on_connect(mut self, callback: impl Fn(&Connection, &mut FlowState) + 'static) -> Self {
+    pub fn on_connect(
+        mut self,
+        callback: impl Fn(&Connection, &mut FlowState<T>) + 'static,
+    ) -> Self {
         self.on_connect = Some(Box::new(callback));
         self
     }
@@ -121,7 +124,7 @@ impl FlowGraph {
     /// Set custom connection validation.
     pub fn validate_connection(
         mut self,
-        validator: impl Fn(&Connection, &FlowState) -> bool + 'static,
+        validator: impl Fn(&Connection, &FlowState<T>) -> bool + 'static,
     ) -> Self {
         self.is_valid_connection = Some(Box::new(validator));
         self
@@ -130,7 +133,7 @@ impl FlowGraph {
     /// Render a single node using the appropriate renderer.
     fn render_node(
         &self,
-        node: &FlowNode,
+        node: &FlowNode<T>,
         viewport: &Viewport,
         is_connecting: bool,
         snap_node_id: Option<&NodeId>,
@@ -291,7 +294,7 @@ impl FlowGraph {
     fn render_handles(
         handles: &[HandleDef],
         node_id: &NodeId,
-        state: &Entity<FlowState>,
+        state: &Entity<FlowState<T>>,
         is_connecting: bool,
         snap_node_id: Option<&NodeId>,
         default_bg: u32,
@@ -445,7 +448,7 @@ impl FlowGraph {
     /// Default node rendering — just the label content (styling is on the wrapper).
     fn render_default_node(
         &self,
-        node: &FlowNode,
+        node: &FlowNode<T>,
         _window: &mut Window,
         _cx: &mut App,
     ) -> AnyElement {
@@ -655,7 +658,7 @@ impl FlowGraph {
     }
 }
 
-impl Render for FlowGraph {
+impl<T: FlowDatum> Render for FlowGraph<T> {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // On second render, edges will have correct node measurements
         // from the first render's measurement canvases.
@@ -713,7 +716,7 @@ impl Render for FlowGraph {
             }
             visible_indices.sort_by_key(|&i| state.nodes[i].z_index);
 
-            let visible_nodes: Vec<FlowNode> = visible_indices
+            let visible_nodes: Vec<FlowNode<T>> = visible_indices
                 .iter()
                 .map(|&i| state.nodes[i].clone())
                 .collect();

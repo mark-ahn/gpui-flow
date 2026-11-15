@@ -27,11 +27,13 @@ const ACCENT_VIOLET: u32 = 0x8b5cf6;
 const ACCENT_AMBER: u32 = 0xf59e0b;
 const ACCENT_ROSE: u32 = 0xf43f5e;
 
+type NodeDatum = ();
+
 struct StressApp {
-    flow: Entity<FlowGraph>,
-    state: Entity<FlowState>,
-    minimap: Entity<Minimap>,
-    controls: Entity<Controls>,
+    flow: Entity<FlowGraph<NodeDatum>>,
+    state: Entity<FlowState<NodeDatum>>,
+    minimap: Entity<Minimap<NodeDatum>>,
+    controls: Entity<Controls<NodeDatum>>,
     focus_handle: FocusHandle,
     playing: bool,
     edges_added: usize,
@@ -206,7 +208,11 @@ fn schedule_tick(cx: &mut Context<StressApp>) {
     .detach();
 }
 
-fn render_stress_node(node: &FlowNode, _window: &mut Window, _cx: &mut App) -> AnyElement {
+fn render_stress_node(
+    node: &FlowNode<NodeDatum>,
+    _window: &mut Window,
+    _cx: &mut App,
+) -> AnyElement {
     div()
         .text_xs()
         .text_color(gpui::rgb(TEXT_MUTED))

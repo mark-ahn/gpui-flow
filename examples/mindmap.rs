@@ -10,6 +10,8 @@ fn next_id() -> String {
     NEXT_ID.fetch_add(1, Ordering::Relaxed).to_string()
 }
 
+type NodeDatum = ();
+
 // Dark theme colors
 const BG: u32 = 0x1a1a2e;
 const GRID: u32 = 0x2a2a3e;
@@ -23,9 +25,9 @@ const TEXT: u32 = 0xf0f0f0;
 const TEXT_DIM: u32 = 0xb0b0b0;
 
 struct MindMapApp {
-    flow: Entity<FlowGraph>,
-    state: Entity<FlowState>,
-    minimap: Entity<Minimap>,
+    flow: Entity<FlowGraph<NodeDatum>>,
+    state: Entity<FlowState<NodeDatum>>,
+    minimap: Entity<Minimap<NodeDatum>>,
     focus_handle: FocusHandle,
     /// Which node is being edited.
     editing: Option<NodeId>,
@@ -204,7 +206,7 @@ impl Render for MindMapApp {
     }
 }
 
-fn add_child_to_selected(state: &Entity<FlowState>, color: u32, cx: &mut App) {
+fn add_child_to_selected(state: &Entity<FlowState<NodeDatum>>, color: u32, cx: &mut App) {
     state.update(cx, |state, _| {
         let parent = state.nodes.iter().find(|n| n.selected).cloned();
         let parent = match parent {
@@ -253,7 +255,7 @@ fn toolbar_button(
 }
 
 /// Root node — large card with bold text.
-fn render_root(node: &FlowNode, _window: &mut Window, _cx: &mut App) -> AnyElement {
+fn render_root(node: &FlowNode<NodeDatum>, _window: &mut Window, _cx: &mut App) -> AnyElement {
     div()
         .px_5()
         .py_3()
@@ -272,7 +274,7 @@ fn render_root(node: &FlowNode, _window: &mut Window, _cx: &mut App) -> AnyEleme
 }
 
 /// Branch node — medium card.
-fn render_branch(node: &FlowNode, _window: &mut Window, _cx: &mut App) -> AnyElement {
+fn render_branch(node: &FlowNode<NodeDatum>, _window: &mut Window, _cx: &mut App) -> AnyElement {
     div()
         .px_3()
         .py_2()
@@ -291,7 +293,7 @@ fn render_branch(node: &FlowNode, _window: &mut Window, _cx: &mut App) -> AnyEle
 }
 
 /// Leaf node — small subtle card.
-fn render_leaf(node: &FlowNode, _window: &mut Window, _cx: &mut App) -> AnyElement {
+fn render_leaf(node: &FlowNode<NodeDatum>, _window: &mut Window, _cx: &mut App) -> AnyElement {
     div()
         .px_3()
         .py_1()
@@ -308,7 +310,7 @@ fn render_leaf(node: &FlowNode, _window: &mut Window, _cx: &mut App) -> AnyEleme
         .into_any_element()
 }
 
-fn node_label(node: &FlowNode) -> String {
+fn node_label(node: &FlowNode<NodeDatum>) -> String {
     if node.label.is_empty() {
         node.id.to_string()
     } else {

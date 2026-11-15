@@ -15,7 +15,11 @@ use self::straight::get_straight_path;
 const ARROW_SIZE: f32 = 6.0;
 
 /// Paint all edges for the flow graph.
-pub fn paint_edges(bounds: &Bounds<Pixels>, state: &FlowState, window: &mut Window) {
+pub fn paint_edges<T: FlowDatum>(
+    bounds: &Bounds<Pixels>,
+    state: &FlowState<T>,
+    window: &mut Window,
+) {
     // Viewport culling bounds
     let win_size = window.viewport_size();
     let win_w = win_size.width.as_f32();
@@ -227,7 +231,10 @@ fn paint_arrowhead(
 }
 
 /// Compute the label position (midpoint) for an edge.
-pub fn compute_edge_label_position(state: &FlowState, edge: &FlowEdge) -> Option<(f32, f32)> {
+pub fn compute_edge_label_position<T: FlowDatum>(
+    state: &FlowState<T>,
+    edge: &FlowEdge,
+) -> Option<(f32, f32)> {
     let source_node = state.get_node(&edge.source)?;
     let target_node = state.get_node(&edge.target)?;
     let source_handle_pos =
@@ -260,7 +267,12 @@ pub fn compute_edge_label_position(state: &FlowState, edge: &FlowEdge) -> Option
 }
 
 /// Hit test all edges — return the ID of the first edge within `threshold` pixels of (mx, my).
-pub fn hit_test_edges(state: &FlowState, mx: f32, my: f32, threshold: f32) -> Option<EdgeId> {
+pub fn hit_test_edges<T: FlowDatum>(
+    state: &FlowState<T>,
+    mx: f32,
+    my: f32,
+    threshold: f32,
+) -> Option<EdgeId> {
     for edge in &state.edges {
         if edge.hidden {
             continue;
@@ -372,8 +384,8 @@ fn point_to_cubic_bezier_distance(
 }
 
 /// Find the handle position for a given node and handle type.
-fn find_handle_position(
-    node: &FlowNode,
+fn find_handle_position<T: FlowDatum>(
+    node: &FlowNode<T>,
     handle_id: &Option<SharedString>,
     handle_type: HandleType,
 ) -> HandlePosition {
@@ -396,8 +408,8 @@ fn find_handle_position(
 }
 
 /// Compute handle center directly from a node reference (no HashMap lookup).
-fn handle_center_from_node(
-    node: &FlowNode,
+fn handle_center_from_node<T: FlowDatum>(
+    node: &FlowNode<T>,
     handle_pos: HandlePosition,
     viewport: &Viewport,
 ) -> (f32, f32) {
