@@ -24,15 +24,15 @@ pub struct FlowGraph<T: FlowDatum> {
     /// Whether to show the default node wrapper chrome (bg, border, shadow, padding).
     show_node_chrome: bool,
     /// Background color for the canvas (default: 0xf8f8f8).
-    bg_color: u32,
+    bg_color: Fill,
     /// Dot grid color (default: 0xd4d4d4).
-    grid_color: u32,
+    grid_color: Hsla,
     /// Background pattern style.
     bg_pattern: BackgroundPattern,
     /// Node wrapper background color.
-    node_bg_color: u32,
+    node_bg_color: Fill,
     /// Node wrapper border color.
-    node_border_color: u32,
+    node_border_color: Hsla,
     /// Whether we've done the initial measurement pass.
     measured: bool,
 }
@@ -47,11 +47,11 @@ impl<T: FlowDatum> FlowGraph<T> {
             on_connect: None,
             is_valid_connection: None,
             show_node_chrome: true,
-            bg_color: 0xf8f8f8,
-            grid_color: 0xd4d4d4,
+            bg_color: gpui_kit::rgb(0xf8f8f8).into(),
+            grid_color: gpui_kit::rgb(0xd4d4d4).into(),
             bg_pattern: BackgroundPattern::Dots,
-            node_bg_color: 0xffffff,
-            node_border_color: 0xe2e2e2,
+            node_bg_color: gpui_kit::rgb(0xffffff).into(),
+            node_border_color: gpui_kit::rgb(0xe2e2e2).into(),
             measured: false,
         }
     }
@@ -92,26 +92,26 @@ impl<T: FlowDatum> FlowGraph<T> {
     }
 
     /// Set the canvas background color.
-    pub fn bg_color(mut self, color: u32) -> Self {
-        self.bg_color = color;
+    pub fn bg_color(mut self, color: impl Into<Fill>) -> Self {
+        self.bg_color = color.into();
         self
     }
 
     /// Set the dot grid color.
-    pub fn grid_color(mut self, color: u32) -> Self {
-        self.grid_color = color;
+    pub fn grid_color(mut self, color: impl Into<Hsla>) -> Self {
+        self.grid_color = color.into();
         self
     }
 
     /// Set the node wrapper background color.
-    pub fn node_bg_color(mut self, color: u32) -> Self {
-        self.node_bg_color = color;
+    pub fn node_bg_color(mut self, color: impl Into<Fill>) -> Self {
+        self.node_bg_color = color.into();
         self
     }
 
     /// Set the node wrapper border color.
-    pub fn node_border_color(mut self, color: u32) -> Self {
-        self.node_border_color = color;
+    pub fn node_border_color(mut self, color: impl Into<Hsla>) -> Self {
+        self.node_border_color = color.into();
         self
     }
 
@@ -163,7 +163,7 @@ impl<T: FlowDatum> FlowGraph<T> {
         let selected = node.selected;
         let dragging = node.dragging;
         let show_chrome = self.show_node_chrome;
-        let node_bg = self.node_bg_color;
+        let node_bg = &self.node_bg_color;
         let node_border = self.node_border_color;
         let element_id: ElementId = ElementId::Name(node.id.clone());
 
@@ -175,7 +175,7 @@ impl<T: FlowDatum> FlowGraph<T> {
                 &state,
                 is_connecting,
                 snap_node_id,
-                node_bg,
+                node_bg.clone(),
                 node_border,
             )
         } else {
@@ -213,9 +213,9 @@ impl<T: FlowDatum> FlowGraph<T> {
             .top(px(screen_y))
             // Node box styling on the wrapper so handles align to visual edges
             .when(show_chrome, |el: Stateful<Div>| {
-                el.bg(gpui::rgb(node_bg))
+                el.bg(node_bg.clone())
                     .border_1()
-                    .border_color(gpui::rgb(node_border))
+                    .border_color(node_border)
                     .rounded_lg()
                     .shadow_sm()
                     .px_4()
@@ -297,8 +297,8 @@ impl<T: FlowDatum> FlowGraph<T> {
         state: &Entity<FlowState<T>>,
         is_connecting: bool,
         snap_node_id: Option<&NodeId>,
-        default_bg: u32,
-        default_border: u32,
+        default_bg: Fill,
+        default_border: Hsla,
     ) -> Vec<AnyElement> {
         let handle_size = 10.0;
         let half = handle_size / 2.0;
@@ -320,12 +320,12 @@ impl<T: FlowDatum> FlowGraph<T> {
 
                 let (bg_color, border_color, size_mult) = if is_snap_target {
                     // Actively snapped — large blue pulse
-                    (gpui::rgb(0x3b82f6), gpui::rgb(0x1d4ed8), 1.4)
+                    (gpui::rgb(0x3b82f6).into(), gpui::rgb(0x1d4ed8).into(), 1.4)
                 } else if is_potential_target {
                     // Valid potential target — subtle blue
-                    (gpui::rgb(0x93c5fd), gpui::rgb(0x3b82f6), 1.0)
+                    (gpui::rgb(0x93c5fd).into(), gpui::rgb(0x3b82f6).into(), 1.0)
                 } else {
-                    (gpui::rgb(default_bg), gpui::rgb(default_border), 1.0)
+                    (default_bg.clone(), default_border, 1.0)
                 };
                 let dot_size = handle_size * size_mult;
 
@@ -468,11 +468,11 @@ impl<T: FlowDatum> FlowGraph<T> {
     fn paint_grid(
         bounds: &Bounds<Pixels>,
         viewport: &Viewport,
-        grid_color: u32,
+        grid_color: Hsla,
         pattern: BackgroundPattern,
         window: &mut Window,
     ) {
-        let color = gpui::rgb(grid_color);
+        let color = grid_color;
         let spacing = 20.0 * viewport.zoom;
 
         if spacing < 5.0 {
@@ -722,12 +722,14 @@ impl<T: FlowDatum> Render for FlowGraph<T> {
                 .collect();
 
             // Edge labels
-            let bg = self.bg_color;
+            let bg = &self.bg_color;
             let mut edge_label_elements: Vec<AnyElement> = Vec::new();
             for edge in &state.edges {
                 if let Some(ref label) = edge.label {
                     if let Some((lx, ly)) = edges::compute_edge_label_position(state, edge) {
-                        let label_color = edge.color.unwrap_or(0xb1b1b7);
+                        // let label_color = edge.color.unwrap_or(0xb1b1b7);
+                        let label_color =
+                            edge.color.unwrap_or_else(|| gpui_kit::rgb(0xb1b1b7).into());
                         edge_label_elements.push(
                             div()
                                 .absolute()
@@ -735,10 +737,10 @@ impl<T: FlowDatum> Render for FlowGraph<T> {
                                 .top(px(ly))
                                 .px_2()
                                 .py_0p5()
-                                .bg(gpui::rgb(bg))
+                                .bg(bg.clone())
                                 .rounded_sm()
                                 .text_xs()
-                                .text_color(gpui::rgb(label_color))
+                                .text_color(label_color)
                                 .child(label.to_string())
                                 .into_any_element(),
                         );
@@ -774,7 +776,7 @@ impl<T: FlowDatum> Render for FlowGraph<T> {
 
         let state_for_canvas = self.state.clone();
         let viewport_for_canvas = viewport;
-        let bg_color = self.bg_color;
+        let bg_color = &self.bg_color;
         let grid_color = self.grid_color;
         let bg_pattern = self.bg_pattern;
         let state_for_scroll = self.state.clone();
@@ -790,7 +792,7 @@ impl<T: FlowDatum> Render for FlowGraph<T> {
             .size_full()
             .overflow_hidden()
             .relative()
-            .bg(gpui::rgb(bg_color))
+            .bg(bg_color.clone())
             .cursor(if is_panning {
                 CursorStyle::ClosedHand
             } else if is_connecting {

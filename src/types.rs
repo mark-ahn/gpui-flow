@@ -201,7 +201,7 @@ pub struct FlowEdge {
     /// Optional label displayed at the edge midpoint.
     pub label: Option<SharedString>,
     /// Custom edge color as 0xRRGGBB. If None, uses the default.
-    pub color: Option<u32>,
+    pub color: Option<gpui_kit::Hsla>,
     /// Custom stroke width. If None, uses default (2.0).
     pub stroke_width: Option<f32>,
 }
@@ -235,7 +235,7 @@ impl FlowEdge {
         self
     }
 
-    pub fn color(mut self, color: u32) -> Self {
+    pub fn color(mut self, color: gpui_kit::Hsla) -> Self {
         self.color = Some(color);
         self
     }

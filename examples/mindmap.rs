@@ -12,17 +12,39 @@ fn next_id() -> String {
 
 type NodeDatum = ();
 
-// Dark theme colors
-const BG: u32 = 0x1a1a2e;
-const GRID: u32 = 0x2a2a3e;
-const CARD: u32 = 0x25253a;
-const CARD_BORDER: u32 = 0x3a3a50;
-const CARD_HOVER: u32 = 0x30304a;
-const ORANGE: u32 = 0xe8a87c;
-const BLUE: u32 = 0x7eb8da;
-const GREEN: u32 = 0x82c991;
-const TEXT: u32 = 0xf0f0f0;
-const TEXT_DIM: u32 = 0xb0b0b0;
+#[derive(Debug, Clone)]
+pub struct ColorScheme {
+    pub bg: gpui_kit::Hsla,
+    pub grid: gpui_kit::Hsla,
+    pub card: gpui_kit::Hsla,
+    pub card_border: gpui_kit::Hsla,
+    pub card_hover: gpui_kit::Hsla,
+    pub text: gpui_kit::Hsla,
+    pub text_dim: gpui_kit::Hsla,
+
+    pub orange: gpui_kit::Hsla,
+    pub blue: gpui_kit::Hsla,
+    pub green: gpui_kit::Hsla,
+}
+const _: () = {
+    impl Default for ColorScheme {
+        fn default() -> Self {
+            // Dark theme colors
+            Self {
+                bg: gpui_kit::rgb(0x1a1a2e).into(),
+                grid: gpui_kit::rgb(0x2a2a3e).into(),
+                card: gpui_kit::rgb(0x25253a).into(),
+                card_border: gpui_kit::rgb(0x3a3a50).into(),
+                card_hover: gpui_kit::rgb(0x30304a).into(),
+                orange: gpui_kit::rgb(0xe8a87c).into(),
+                blue: gpui_kit::rgb(0x7eb8da).into(),
+                green: gpui_kit::rgb(0x82c991).into(),
+                text: gpui_kit::rgb(0xf0f0f0).into(),
+                text_dim: gpui_kit::rgb(0xb0b0b0).into(),
+            }
+        }
+    }
+};
 
 struct MindMapApp {
     flow: Entity<FlowGraph<NodeDatum>>,
@@ -68,6 +90,8 @@ impl MindMapApp {
 
 impl Render for MindMapApp {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let colors = ColorScheme::default();
+
         let editing = self.editing.clone();
         let edit_buffer = self.edit_buffer.clone();
         let _state_for_add = self.state.clone();
@@ -77,7 +101,7 @@ impl Render for MindMapApp {
             .track_focus(&self.focus_handle)
             .size_full()
             .relative()
-            .bg(gpui::rgb(BG))
+            .bg(colors.bg)
             .child(self.flow.clone())
             // Toolbar
             .child(
@@ -89,21 +113,21 @@ impl Render for MindMapApp {
                     .gap_2()
                     .child(toolbar_button("+ Branch", {
                         let s = self.state.clone();
-                        move |_, _, cx| add_child_to_selected(&s, ORANGE, cx)
+                        move |_, _, cx| add_child_to_selected(&s, colors.orange, cx)
                     }))
                     .child(toolbar_button("+ Blue", {
                         let s = self.state.clone();
-                        move |_, _, cx| add_child_to_selected(&s, BLUE, cx)
+                        move |_, _, cx| add_child_to_selected(&s, colors.blue, cx)
                     }))
                     .child(toolbar_button("+ Green", {
                         let s = self.state.clone();
-                        move |_, _, cx| add_child_to_selected(&s, GREEN, cx)
+                        move |_, _, cx| add_child_to_selected(&s, colors.green, cx)
                     }))
                     .child(
                         div()
                             .ml_4()
                             .text_xs()
-                            .text_color(gpui::rgb(TEXT_DIM))
+                            .text_color(colors.text_dim)
                             .child("Enter: edit | Del: delete | Cmd+Z: undo"),
                     ),
             )
@@ -116,30 +140,30 @@ impl Render for MindMapApp {
                         .right(px(12.0))
                         .px_3()
                         .py_2()
-                        .bg(gpui::rgb(CARD))
+                        .bg(colors.card)
                         .rounded_md()
                         .border_1()
-                        .border_color(gpui::rgb(ORANGE))
+                        .border_color(colors.orange)
                         .flex()
                         .gap_2()
                         .items_center()
                         .child(
                             div()
                                 .text_xs()
-                                .text_color(gpui::rgb(TEXT_DIM))
+                                .text_color(colors.text_dim)
                                 .child("Editing:"),
                         )
                         .child(
                             div()
                                 .text_sm()
-                                .text_color(gpui::rgb(TEXT))
+                                .text_color(colors.text)
                                 .min_w(px(100.0))
                                 .child(format!("{}|", edit_buffer)),
                         )
                         .child(
                             div()
                                 .text_xs()
-                                .text_color(gpui::rgb(TEXT_DIM))
+                                .text_color(colors.text_dim)
                                 .child("Enter=save  Esc=cancel"),
                         ),
                 )
@@ -154,6 +178,8 @@ impl Render for MindMapApp {
             )
             // Keyboard handler for editing
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                let colors = ColorScheme::default();
+
                 let key: &str = event.keystroke.key.as_ref();
 
                 // If currently editing, handle text input
@@ -199,14 +225,18 @@ impl Render for MindMapApp {
 
                 // Tab → add child to selected
                 if key == "tab" {
-                    add_child_to_selected(&this.state, ORANGE, cx);
+                    add_child_to_selected(&this.state, colors.orange, cx);
                     cx.notify();
                 }
             }))
     }
 }
 
-fn add_child_to_selected(state: &Entity<FlowState<NodeDatum>>, color: u32, cx: &mut App) {
+fn add_child_to_selected(
+    state: &Entity<FlowState<NodeDatum>>,
+    color: gpui_kit::Hsla,
+    cx: &mut App,
+) {
     state.update(cx, |state, _| {
         let parent = state.nodes.iter().find(|n| n.selected).cloned();
         let parent = match parent {
@@ -239,16 +269,18 @@ fn toolbar_button(
     label: &'static str,
     on_click: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
 ) -> impl IntoElement {
+    let colors = ColorScheme::default();
+
     div()
         .id(SharedString::from(label))
         .px_3()
         .py_1()
-        .bg(gpui::rgb(CARD))
+        .bg(colors.card)
         .text_xs()
-        .text_color(gpui::rgb(TEXT))
+        .text_color(colors.text)
         .rounded_md()
         .border_1()
-        .border_color(gpui::rgb(CARD_BORDER))
+        .border_color(colors.card_border)
         .cursor(CursorStyle::PointingHand)
         .on_mouse_down(MouseButton::Left, on_click)
         .child(label)
@@ -256,18 +288,20 @@ fn toolbar_button(
 
 /// Root node — large card with bold text.
 fn render_root(node: &FlowNode<NodeDatum>, _window: &mut Window, _cx: &mut App) -> AnyElement {
+    let colors = ColorScheme::default();
+
     div()
         .px_5()
         .py_3()
-        .bg(gpui::rgb(CARD))
+        .bg(colors.card)
         .rounded_xl()
         .border_1()
-        .border_color(gpui::rgb(CARD_BORDER))
+        .border_color(colors.card_border)
         .child(
             div()
                 .text_base()
                 .font_weight(FontWeight::BOLD)
-                .text_color(gpui::rgb(TEXT))
+                .text_color(colors.text)
                 .child(node_label(node)),
         )
         .into_any_element()
@@ -275,18 +309,20 @@ fn render_root(node: &FlowNode<NodeDatum>, _window: &mut Window, _cx: &mut App) 
 
 /// Branch node — medium card.
 fn render_branch(node: &FlowNode<NodeDatum>, _window: &mut Window, _cx: &mut App) -> AnyElement {
+    let colors = ColorScheme::default();
+
     div()
         .px_3()
         .py_2()
-        .bg(gpui::rgb(CARD))
+        .bg(colors.card)
         .rounded_lg()
         .border_1()
-        .border_color(gpui::rgb(CARD_BORDER))
+        .border_color(colors.card_border)
         .child(
             div()
                 .text_sm()
                 .font_weight(FontWeight::MEDIUM)
-                .text_color(gpui::rgb(TEXT))
+                .text_color(colors.text)
                 .child(node_label(node)),
         )
         .into_any_element()
@@ -294,17 +330,18 @@ fn render_branch(node: &FlowNode<NodeDatum>, _window: &mut Window, _cx: &mut App
 
 /// Leaf node — small subtle card.
 fn render_leaf(node: &FlowNode<NodeDatum>, _window: &mut Window, _cx: &mut App) -> AnyElement {
+    let colors = ColorScheme::default();
     div()
         .px_3()
         .py_1()
-        .bg(gpui::rgb(CARD_HOVER))
+        .bg(colors.card_hover)
         .rounded_md()
         .border_1()
-        .border_color(gpui::rgb(CARD_BORDER))
+        .border_color(colors.card_border)
         .child(
             div()
                 .text_xs()
-                .text_color(gpui::rgb(TEXT_DIM))
+                .text_color(colors.text_dim)
                 .child(node_label(node)),
         )
         .into_any_element()
@@ -398,42 +435,43 @@ fn main() {
                             .handles(vec![HandleDef::target(HandlePosition::Left)]),
                     ];
 
+                    let colors = ColorScheme::default();
                     let edges = vec![
                         FlowEdge::new("e-r-g", "root", "groceries")
-                            .color(ORANGE)
+                            .color(colors.orange)
                             .stroke_width(3.0),
                         FlowEdge::new("e-r-e", "root", "errands")
-                            .color(BLUE)
+                            .color(colors.blue)
                             .stroke_width(3.0),
                         FlowEdge::new("e-r-p", "root", "projects")
-                            .color(GREEN)
+                            .color(colors.green)
                             .stroke_width(3.0),
                         FlowEdge::new("e-g-1", "groceries", "g1")
-                            .color(ORANGE)
+                            .color(colors.orange)
                             .stroke_width(2.0),
                         FlowEdge::new("e-g-2", "groceries", "g2")
-                            .color(ORANGE)
+                            .color(colors.orange)
                             .stroke_width(2.0),
                         FlowEdge::new("e-g-3", "groceries", "g3")
-                            .color(ORANGE)
+                            .color(colors.orange)
                             .stroke_width(2.0),
                         FlowEdge::new("e-g-4", "groceries", "g4")
-                            .color(ORANGE)
+                            .color(colors.orange)
                             .stroke_width(2.0),
                         FlowEdge::new("e-e-1", "errands", "e1")
-                            .color(BLUE)
+                            .color(colors.blue)
                             .stroke_width(2.0),
                         FlowEdge::new("e-e-2", "errands", "e2")
-                            .color(BLUE)
+                            .color(colors.blue)
                             .stroke_width(2.0),
                         FlowEdge::new("e-e-3", "errands", "e3")
-                            .color(BLUE)
+                            .color(colors.blue)
                             .stroke_width(2.0),
                         FlowEdge::new("e-p-1", "projects", "p1")
-                            .color(GREEN)
+                            .color(colors.green)
                             .stroke_width(2.0),
                         FlowEdge::new("e-p-2", "projects", "p2")
-                            .color(GREEN)
+                            .color(colors.green)
                             .stroke_width(2.0),
                     ];
 
@@ -442,8 +480,8 @@ fn main() {
                     let flow = cx.new(|cx| {
                         FlowGraph::new(state.clone(), cx)
                             .no_node_chrome()
-                            .bg_color(BG)
-                            .grid_color(GRID)
+                            .bg_color(colors.bg)
+                            .grid_color(colors.grid)
                             .node_renderer("root", render_root)
                             .node_renderer("branch", render_branch)
                             .node_renderer("leaf", render_leaf)

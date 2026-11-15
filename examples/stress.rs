@@ -13,19 +13,40 @@ const COLS: usize = 40;
 const SPACING_X: f32 = 260.0;
 const SPACING_Y: f32 = 120.0;
 
-// Vercel/shadcn palette
-const BG: u32 = 0x09090b;
-const GRID: u32 = 0x18181b;
-const CARD: u32 = 0x0a0a0c;
-const CARD_BORDER: u32 = 0x27272a;
-const _TEXT: u32 = 0xfafafa;
-const TEXT_MUTED: u32 = 0x71717a;
-
-const ACCENT_BLUE: u32 = 0x3b82f6;
-const ACCENT_EMERALD: u32 = 0x10b981;
-const ACCENT_VIOLET: u32 = 0x8b5cf6;
-const ACCENT_AMBER: u32 = 0xf59e0b;
-const ACCENT_ROSE: u32 = 0xf43f5e;
+#[derive(Debug, Clone)]
+pub struct ColorScheme {
+    pub bg: gpui_kit::Hsla,
+    pub grid: gpui_kit::Hsla,
+    pub card: gpui_kit::Hsla,
+    pub card_border: gpui_kit::Hsla,
+    pub text: gpui_kit::Hsla,
+    pub text_muted: gpui_kit::Hsla,
+    pub accent_blue: gpui_kit::Hsla,
+    pub accent_emerald: gpui_kit::Hsla,
+    pub accent_violet: gpui_kit::Hsla,
+    pub accent_amber: gpui_kit::Hsla,
+    pub accent_rose: gpui_kit::Hsla,
+}
+const _: () = {
+    impl Default for ColorScheme {
+        fn default() -> Self {
+            // Vercel/shadcn palette
+            Self {
+                bg: gpui_kit::rgb(0x09090b).into(),
+                grid: gpui_kit::rgb(0x18181b).into(),
+                card: gpui_kit::rgb(0x0a0a0c).into(),
+                card_border: gpui_kit::rgb(0x27272a).into(),
+                text: gpui_kit::rgb(0xfafafa).into(),
+                text_muted: gpui_kit::rgb(0xa1a1aa).into(),
+                accent_blue: gpui_kit::rgb(0x3b82f6).into(),
+                accent_emerald: gpui_kit::rgb(0x10b981).into(),
+                accent_violet: gpui_kit::rgb(0x8b5cf6).into(),
+                accent_amber: gpui_kit::rgb(0xf59e0b).into(),
+                accent_rose: gpui_kit::rgb(0xf43f5e).into(),
+            }
+        }
+    }
+};
 
 type NodeDatum = ();
 
@@ -53,13 +74,14 @@ impl StressApp {
             return;
         }
 
+        let _colors = ColorScheme::default();
         let count = EDGES_PER_TICK.min(MAX_EDGES - self.edges_added);
         let colors = [
-            ACCENT_BLUE,
-            ACCENT_EMERALD,
-            ACCENT_VIOLET,
-            ACCENT_AMBER,
-            ACCENT_ROSE,
+            _colors.accent_blue,
+            _colors.accent_emerald,
+            _colors.accent_violet,
+            _colors.accent_amber,
+            _colors.accent_rose,
         ];
 
         let mut randoms = Vec::with_capacity(count * 3);
@@ -103,13 +125,14 @@ impl Render for StressApp {
         let _ = state;
 
         let status = if self.playing { "Playing" } else { "Paused" };
+        let colors = ColorScheme::default();
 
         div()
             .id("stress-root")
             .track_focus(&self.focus_handle)
             .size_full()
             .relative()
-            .bg(gpui::rgb(BG))
+            .bg(colors.bg)
             .child(self.flow.clone())
             // Controls bottom-left
             .child(
@@ -138,9 +161,9 @@ impl Render for StressApp {
                     .bg(gpui::rgba(0x18181b_ee))
                     .rounded_md()
                     .border_1()
-                    .border_color(gpui::rgb(CARD_BORDER))
+                    .border_color(colors.card_border)
                     .text_xs()
-                    .text_color(gpui::rgb(TEXT_MUTED))
+                    .text_color(colors.text_muted)
                     .child(format!(
                         "{} nodes  {}  edges  {}  +{}/{}",
                         node_count, "\u{00b7}", edge_count, self.edges_added, MAX_EDGES,
@@ -157,7 +180,7 @@ impl Render for StressApp {
                     .bg(gpui::rgba(0x18181b_ee))
                     .rounded_md()
                     .border_1()
-                    .border_color(gpui::rgb(CARD_BORDER))
+                    .border_color(colors.card_border)
                     .flex()
                     .gap_2()
                     .items_center()
@@ -167,15 +190,15 @@ impl Render for StressApp {
                             .h(px(6.0))
                             .rounded_full()
                             .bg(if self.playing {
-                                gpui::rgb(ACCENT_EMERALD)
+                                colors.accent_emerald
                             } else {
-                                gpui::rgb(TEXT_MUTED)
+                                colors.text_muted
                             }),
                     )
                     .child(
                         div()
                             .text_xs()
-                            .text_color(gpui::rgb(TEXT_MUTED))
+                            .text_color(colors.text_muted)
                             .child(format!("{}  \u{00b7}  Space to toggle", status)),
                     ),
             )
@@ -213,9 +236,10 @@ fn render_stress_node(
     _window: &mut Window,
     _cx: &mut App,
 ) -> AnyElement {
+    let colors = ColorScheme::default();
     div()
         .text_xs()
-        .text_color(gpui::rgb(TEXT_MUTED))
+        .text_color(colors.text_muted)
         .child(if node.label.is_empty() {
             node.id.to_string()
         } else {
@@ -255,6 +279,7 @@ fn main() {
                         );
                     }
 
+                    let colors = ColorScheme::default();
                     // Subtle grid-neighbor edges
                     let mut edges = Vec::new();
                     for i in 0..NODE_COUNT {
@@ -263,7 +288,7 @@ fn main() {
                             let eid: SharedString = format!("ge{}", i).into();
                             edges.push(
                                 FlowEdge::new(eid, format!("n{}", i), format!("n{}", i + 1))
-                                    .color(CARD_BORDER)
+                                    .color(colors.card_border)
                                     .stroke_width(1.0),
                             );
                         }
@@ -273,11 +298,11 @@ fn main() {
 
                     let flow = cx.new(|cx| {
                         FlowGraph::new(state.clone(), cx)
-                            .bg_color(BG)
-                            .grid_color(GRID)
+                            .bg_color(colors.bg)
+                            .grid_color(colors.grid)
                             .bg_pattern(BackgroundPattern::Dots)
-                            .node_bg_color(CARD)
-                            .node_border_color(CARD_BORDER)
+                            .node_bg_color(colors.card)
+                            .node_border_color(colors.card_border)
                             .node_renderer("stress", render_stress_node)
                     });
 

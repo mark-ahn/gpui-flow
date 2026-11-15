@@ -1,18 +1,40 @@
 use gpui_flow::*;
 use gpui_kit::gpui::*;
 
-// Vercel/shadcn palette
-const BG: u32 = 0x09090b;
-const GRID: u32 = 0x18181b;
-const CARD: u32 = 0x0a0a0c;
-const CARD_BORDER: u32 = 0x27272a;
-const TEXT: u32 = 0xfafafa;
-const TEXT_MUTED: u32 = 0xa1a1aa;
-const ACCENT_BLUE: u32 = 0x3b82f6;
-const ACCENT_EMERALD: u32 = 0x10b981;
-const ACCENT_VIOLET: u32 = 0x8b5cf6;
-const ACCENT_AMBER: u32 = 0xf59e0b;
-const ACCENT_ROSE: u32 = 0xf43f5e;
+#[derive(Debug, Clone)]
+pub struct ColorScheme {
+    pub bg: gpui_kit::Hsla,
+    pub grid: gpui_kit::Hsla,
+    pub card: gpui_kit::Hsla,
+    pub card_border: gpui_kit::Hsla,
+    pub text: gpui_kit::Hsla,
+    pub text_muted: gpui_kit::Hsla,
+    pub accent_blue: gpui_kit::Hsla,
+    pub accent_emerald: gpui_kit::Hsla,
+    pub accent_violet: gpui_kit::Hsla,
+    pub accent_amber: gpui_kit::Hsla,
+    pub accent_rose: gpui_kit::Hsla,
+}
+const _: () = {
+    impl Default for ColorScheme {
+        fn default() -> Self {
+            // Vercel/shadcn palette
+            Self {
+                bg: gpui_kit::rgb(0x09090b).into(),
+                grid: gpui_kit::rgb(0x18181b).into(),
+                card: gpui_kit::rgb(0x0a0a0c).into(),
+                card_border: gpui_kit::rgb(0x27272a).into(),
+                text: gpui_kit::rgb(0xfafafa).into(),
+                text_muted: gpui_kit::rgb(0xa1a1aa).into(),
+                accent_blue: gpui_kit::rgb(0x3b82f6).into(),
+                accent_emerald: gpui_kit::rgb(0x10b981).into(),
+                accent_violet: gpui_kit::rgb(0x8b5cf6).into(),
+                accent_amber: gpui_kit::rgb(0xf59e0b).into(),
+                accent_rose: gpui_kit::rgb(0xf43f5e).into(),
+            }
+        }
+    }
+};
 
 type NodeDatum = ();
 struct FlowExample {
@@ -23,10 +45,12 @@ struct FlowExample {
 
 impl Render for FlowExample {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        let colors = ColorScheme::default();
+
         div()
             .size_full()
             .relative()
-            .bg(gpui::rgb(BG))
+            .bg(colors.bg)
             .pt_20()
             .text_color(rgba(0xffffffff))
             .child("some-label")
@@ -59,7 +83,9 @@ fn node_text(node: &FlowNode<()>) -> String {
 }
 
 /// Render node with a colored left accent bar.
-fn render_node_with_accent(node: &FlowNode<()>, accent: u32, type_label: &str) -> AnyElement {
+fn render_node_with_accent(node: &FlowNode<()>, accent: Hsla, type_label: &str) -> AnyElement {
+    let colors = ColorScheme::default();
+
     div()
         .flex()
         .flex_row()
@@ -68,7 +94,7 @@ fn render_node_with_accent(node: &FlowNode<()>, accent: u32, type_label: &str) -
             div()
                 .w(px(3.0))
                 .rounded_l_sm()
-                .bg(gpui::rgb(accent))
+                .bg(accent)
                 .my(px(-8.0))
                 .ml(px(-16.0))
                 .mr(px(12.0)),
@@ -81,14 +107,14 @@ fn render_node_with_accent(node: &FlowNode<()>, accent: u32, type_label: &str) -
                 .child(
                     div()
                         .text_xs()
-                        .text_color(gpui::rgb(TEXT_MUTED))
+                        .text_color(colors.text_muted)
                         .font_weight(FontWeight::MEDIUM)
                         .child(type_label.to_string()),
                 )
                 .child(
                     div()
                         .text_sm()
-                        .text_color(gpui::rgb(TEXT))
+                        .text_color(colors.text)
                         .font_weight(FontWeight::MEDIUM)
                         .child(node_text(node)),
                 ),
@@ -97,23 +123,28 @@ fn render_node_with_accent(node: &FlowNode<()>, accent: u32, type_label: &str) -
 }
 
 fn render_input(node: &FlowNode<NodeDatum>, _w: &mut Window, _cx: &mut App) -> AnyElement {
-    render_node_with_accent(node, ACCENT_EMERALD, "Input")
+    let colors = ColorScheme::default();
+    render_node_with_accent(node, colors.accent_emerald, "Input")
 }
 
 fn render_process(node: &FlowNode<NodeDatum>, _w: &mut Window, _cx: &mut App) -> AnyElement {
-    render_node_with_accent(node, ACCENT_BLUE, "Process")
+    let colors = ColorScheme::default();
+    render_node_with_accent(node, colors.accent_blue, "Process")
 }
 
 fn render_output(node: &FlowNode<NodeDatum>, _w: &mut Window, _cx: &mut App) -> AnyElement {
-    render_node_with_accent(node, ACCENT_VIOLET, "Output")
+    let colors = ColorScheme::default();
+    render_node_with_accent(node, colors.accent_violet, "Output")
 }
 
 fn render_trigger(node: &FlowNode<NodeDatum>, _w: &mut Window, _cx: &mut App) -> AnyElement {
-    render_node_with_accent(node, ACCENT_AMBER, "Trigger")
+    let colors = ColorScheme::default();
+    render_node_with_accent(node, colors.accent_amber, "Trigger")
 }
 
 fn render_sink(node: &FlowNode<NodeDatum>, _w: &mut Window, _cx: &mut App) -> AnyElement {
-    render_node_with_accent(node, ACCENT_ROSE, "Sink")
+    let colors = ColorScheme::default();
+    render_node_with_accent(node, colors.accent_rose, "Sink")
 }
 
 fn main() {
@@ -128,6 +159,8 @@ fn main() {
                     ..Default::default()
                 },
                 |_window, cx| {
+                    let colors = ColorScheme::default();
+
                     let nodes = vec![
                         // Left column — triggers
                         FlowNode::new("webhook", 60.0, 80.0)
@@ -192,25 +225,25 @@ fn main() {
 
                     let edges = vec![
                         FlowEdge::new("e1", "webhook", "auth")
-                            .color(ACCENT_AMBER)
+                            .color(colors.accent_amber)
                             .stroke_width(2.0),
                         FlowEdge::new("e2", "schedule", "transform")
-                            .color(ACCENT_AMBER)
+                            .color(colors.accent_amber)
                             .stroke_width(2.0),
                         FlowEdge::new("e3", "auth", "db")
-                            .color(ACCENT_BLUE)
+                            .color(colors.accent_blue)
                             .stroke_width(2.0),
                         FlowEdge::new("e4", "auth", "transform")
-                            .color(ACCENT_BLUE)
+                            .color(colors.accent_blue)
                             .stroke_width(1.5),
                         FlowEdge::new("e5", "transform", "cache")
-                            .color(ACCENT_BLUE)
+                            .color(colors.accent_blue)
                             .stroke_width(2.0),
                         FlowEdge::new("e6", "config", "validate")
-                            .color(ACCENT_EMERALD)
+                            .color(colors.accent_emerald)
                             .stroke_width(2.0),
                         FlowEdge::new("e7", "validate", "queue")
-                            .color(ACCENT_VIOLET)
+                            .color(colors.accent_violet)
                             .stroke_width(2.0),
                     ];
 
@@ -218,11 +251,11 @@ fn main() {
 
                     let flow = cx.new(|cx| {
                         FlowGraph::new(state.clone(), cx)
-                            .bg_color(BG)
-                            .grid_color(GRID)
+                            .bg_color(colors.bg)
+                            .grid_color(colors.grid)
                             .bg_pattern(BackgroundPattern::Cross)
-                            .node_bg_color(CARD)
-                            .node_border_color(CARD_BORDER)
+                            .node_bg_color(colors.card)
+                            .node_border_color(colors.card_border)
                             .node_renderer("input", render_input)
                             .node_renderer("process", render_process)
                             .node_renderer("output", render_output)

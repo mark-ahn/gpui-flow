@@ -74,7 +74,8 @@ pub fn paint_edges<T: FlowDatum>(
         let color: Background = if edge.selected {
             selected_color.clone()
         } else if let Some(c) = edge.color {
-            gpui_kit::gpui::rgb(c).into()
+            // gpui_kit::gpui::rgb(c).into()
+            c.to_rgb().into()
         } else {
             edge_color.clone()
         };
