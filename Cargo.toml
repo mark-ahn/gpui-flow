@@ -1,6 +1,6 @@
 [package]
 name = "gpui-flow"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2024"
 description = "A node-based flow graph editor for GPUI, inspired by React Flow / xyflow."
 license = "MIT"

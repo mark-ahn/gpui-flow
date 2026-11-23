@@ -665,7 +665,11 @@ impl<T: FlowDatum> FlowGraph<T> {
         flow_state: Entity<FlowState<T>>,
         bounds: Bounds<Pixels>,
     ) -> impl Fn(&MouseDownEvent, DispatchPhase, &mut Window, &mut App) + use<T> {
-        move |event, _phase, _window, cx| {
+        move |event, phase, _window, cx| {
+            if !phase.bubble() {
+                return;
+            }
+
             let mouse_pos = event.position - bounds.origin;
             flow_state.update(cx, |state, _| {
                 // If a node drag or connection was already started, skip
@@ -734,7 +738,11 @@ impl<T: FlowDatum> FlowGraph<T> {
         flow_state: Entity<FlowState<T>>,
         bounds: Bounds<Pixels>,
     ) -> impl Fn(&MouseMoveEvent, DispatchPhase, &mut Window, &mut App) + use<T> {
-        move |event, _, _window, cx| {
+        move |event, phase, _window, cx| {
+            if !phase.bubble() {
+                return;
+            }
+
             let mouse_pos = event.position - bounds.origin;
             let mx = mouse_pos.x.as_f32();
             let my = mouse_pos.y.as_f32();
@@ -826,7 +834,11 @@ impl<T: FlowDatum> FlowGraph<T> {
         flow_state: Entity<FlowState<T>>,
         _bounds: Bounds<Pixels>,
     ) -> impl Fn(&MouseUpEvent, DispatchPhase, &mut Window, &mut App) + use<T> {
-        move |_event, _, _window, cx| {
+        move |_event, phase, _window, cx| {
+            if !phase.bubble() {
+                return;
+            }
+
             let mut changed = false;
 
             flow_state.update(cx, |state, _| {
