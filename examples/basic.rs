@@ -38,6 +38,7 @@ const _: () = {
 
 type NodeDatum = ();
 struct FlowExample {
+    focus_handle: FocusHandle,
     flow: Entity<FlowGraph<NodeDatum>>,
     minimap: Entity<Minimap<NodeDatum>>,
     controls: Entity<Controls<NodeDatum>>,
@@ -48,12 +49,14 @@ impl Render for FlowExample {
         let colors = ColorScheme::default();
 
         div()
+            .id("some-example")
+            .track_focus(&self.focus_handle)
             .size_full()
             .relative()
             .bg(colors.bg)
             .pt_20()
             .text_color(rgba(0xffffffff))
-            .child("some-label")
+            // .child("some-label")
             .child(self.flow.clone())
             // Controls bottom-left
             .child(
@@ -119,6 +122,7 @@ fn render_node_with_accent(node: &FlowNode<()>, accent: Hsla, type_label: &str) 
                         .child(node_text(node)),
                 ),
         )
+        // .on_key_down(|_evt, window, cx| {})
         .into_any_element()
 }
 
@@ -162,6 +166,10 @@ fn main() {
                     let colors = ColorScheme::default();
 
                     let nodes = vec![
+                        FlowNode::new("origin", 0.0, 0.0)
+                            .label("Origin")
+                            .node_type("trigger")
+                            .size(130.0, 52.0),
                         // Left column — triggers
                         FlowNode::new("webhook", 60.0, 80.0)
                             .label("Webhook")
@@ -225,6 +233,7 @@ fn main() {
 
                     let edges = vec![
                         FlowEdge::new("e1", "webhook", "auth")
+                            .label("edge-label")
                             .color(colors.accent_amber)
                             .stroke_width(2.0),
                         FlowEdge::new("e2", "schedule", "transform")
@@ -253,7 +262,7 @@ fn main() {
                         FlowGraph::new(state.clone(), cx)
                             .bg_color(colors.bg)
                             .grid_color(colors.grid)
-                            .bg_pattern(BackgroundPattern::Cross)
+                            // .bg_pattern(BackgroundPattern::Cross)
                             .node_bg_color(colors.card)
                             .node_border_color(colors.card_border)
                             .node_renderer("input", render_input)
@@ -267,7 +276,8 @@ fn main() {
                         cx.new(|_| Minimap::new(state.clone()).container_bounds(1100.0, 750.0));
                     let controls = cx.new(|_| Controls::new(state).container_size(1100.0, 750.0));
 
-                    cx.new(|_| FlowExample {
+                    cx.new(|cx| FlowExample {
+                        focus_handle: cx.focus_handle(),
                         flow,
                         minimap,
                         controls,

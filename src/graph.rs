@@ -364,7 +364,8 @@ impl<T: FlowDatum> FlowGraph<T> {
                                     from_type: handle_type,
                                     from_position: handle_position,
                                     from_point,
-                                    to_point: (mouse_pos.x.as_f32(), mouse_pos.y.as_f32()),
+                                    // to_point: (mouse_pos.x.as_f32(), mouse_pos.y.as_f32()),
+                                    to_point: from_point,
                                     snap_target: None,
                                 });
                                 // Prevent node drag
@@ -631,7 +632,7 @@ impl<T: FlowDatum> FlowGraph<T> {
         };
         let (tx, ty) = {
             let (x, y) = draft.to_point;
-            (x, y)
+            (x + x_delta, y + y_delta)
         };
 
         let mut builder = PathBuilder::stroke(px(2.0));
@@ -654,6 +655,358 @@ impl<T: FlowDatum> FlowGraph<T> {
 
         if let Ok(path) = builder.build() {
             window.paint_path(path, color);
+        }
+    }
+}
+
+impl<T: FlowDatum> FlowGraph<T> {
+    fn on_mouse_down_fn(
+        entity_id: EntityId,
+        flow_state: Entity<FlowState<T>>,
+        bounds: Bounds<Pixels>,
+    ) -> impl Fn(&MouseDownEvent, DispatchPhase, &mut Window, &mut App) + use<T> {
+        move |event, _phase, _window, cx| {
+            let mouse_pos = event.position - bounds.origin;
+            flow_state.update(cx, |state, _| {
+                // If a node drag or connection was already started, skip
+                if state.drag_state.is_some() || state.connecting.is_some() {
+                    return;
+                }
+
+                // Try edge hit testing
+                let mx = mouse_pos.x.as_f32();
+                let my = mouse_pos.y.as_f32();
+                // println!("mouse=({mx}, {my})");
+                if let Some(edge_id) = edges::hit_test_edges(state, mx, my, 5.0) {
+                    if !event.modifiers.platform {
+                        for n in &mut state.nodes {
+                            n.selected = false;
+                        }
+                        for e in &mut state.edges {
+                            e.selected = false;
+                        }
+                    }
+                    if let Some(edge) = state.edges.iter_mut().find(|e| e.id == edge_id) {
+                        edge.selected = true;
+                    }
+                    return;
+                }
+
+                // Shift+drag → start box selection
+                if event.modifiers.shift {
+                    if !event.modifiers.platform {
+                        for n in &mut state.nodes {
+                            n.selected = false;
+                        }
+                        for e in &mut state.edges {
+                            e.selected = false;
+                        }
+                    }
+                    state.selection_box = Some(SelectionBox {
+                        start: (mx, my),
+                        current: (mx, my),
+                    });
+                    return;
+                }
+
+                // Deselect all nodes and edges
+                if !event.modifiers.platform {
+                    for n in &mut state.nodes {
+                        n.selected = false;
+                    }
+                    for e in &mut state.edges {
+                        e.selected = false;
+                    }
+                }
+
+                // Start pan drag
+                state.pan_drag = Some(PanDragState {
+                    start_mouse: (mx, my),
+                    start_viewport: (state.viewport.x, state.viewport.y),
+                });
+            });
+            cx.notify(entity_id);
+        }
+    }
+
+    fn on_mouse_move_fn(
+        entity_id: EntityId,
+        flow_state: Entity<FlowState<T>>,
+        bounds: Bounds<Pixels>,
+    ) -> impl Fn(&MouseMoveEvent, DispatchPhase, &mut Window, &mut App) + use<T> {
+        move |event, _, _window, cx| {
+            let mouse_pos = event.position - bounds.origin;
+            let mx = mouse_pos.x.as_f32();
+            let my = mouse_pos.y.as_f32();
+
+            let mut changed = false;
+
+            flow_state.update(cx, |state, _| {
+                // Box selection
+                if let Some(ref mut sel) = state.selection_box {
+                    sel.current = (mx, my);
+                    // Select nodes whose screen bounds intersect the box
+                    let (sx, sy, ex, ey) = (
+                        sel.start.0.min(sel.current.0),
+                        sel.start.1.min(sel.current.1),
+                        sel.start.0.max(sel.current.0),
+                        sel.start.1.max(sel.current.1),
+                    );
+                    let viewport = state.viewport;
+                    for node in &mut state.nodes {
+                        if node.hidden {
+                            continue;
+                        }
+                        let (nx, ny) = viewport.flow_to_screen(node.position);
+                        let nw = node.measured_width.map(|p| p.as_f32()).unwrap_or(150.0);
+                        let nh = node.measured_height.map(|p| p.as_f32()).unwrap_or(40.0);
+                        // AABB intersection
+                        let intersects = nx < ex && nx + nw > sx && ny < ey && ny + nh > sy;
+                        node.selected = intersects;
+                    }
+                    changed = true;
+                }
+                // Connection dragging with snap-to-handle
+                else if state.connecting.is_some() {
+                    // Clone draft to avoid borrow conflict with find_snap_target
+                    let mut draft = state.connecting.clone().unwrap();
+                    let snap = state.find_snap_target(&draft, mx, my);
+                    if let Some(ref target) = snap {
+                        draft.to_point = target.point;
+                    } else {
+                        draft.to_point = (mx, my);
+                    }
+                    draft.snap_target = snap;
+                    state.connecting = Some(draft);
+                    changed = true;
+                }
+                // Node dragging
+                else if let Some(ref drag) = state.drag_state {
+                    let dx = (mx - drag.origin_mouse.0) / state.viewport.zoom;
+                    let dy = (my - drag.origin_mouse.1) / state.viewport.zoom;
+
+                    let origins = drag.node_origins.clone();
+                    let snap = state.snap_to_grid;
+                    let snap_grid = state.snap_grid;
+                    for (node_id, origin) in &origins {
+                        let mut new_x = origin.x + dx;
+                        let mut new_y = origin.y + dy;
+
+                        if snap {
+                            let (gx, gy) = snap_grid;
+                            new_x = (new_x / gx).round() * gx;
+                            new_y = (new_y / gy).round() * gy;
+                        }
+
+                        if let Some(node) = state.get_node_mut(node_id) {
+                            node.position = FlowPoint::new(
+                                new_x + bounds.origin.x.as_f32(),
+                                new_y + bounds.origin.y.as_f32(),
+                            );
+                        }
+                    }
+                    changed = true;
+                }
+                // Canvas panning
+                else if let Some(pan) = state.pan_drag {
+                    state.viewport.x = pan.start_viewport.0 + (mx - pan.start_mouse.0);
+                    state.viewport.y = pan.start_viewport.1 + (my - pan.start_mouse.1);
+                    changed = true;
+                }
+            });
+
+            if changed {
+                cx.notify(entity_id);
+            }
+        }
+    }
+
+    fn on_mouse_up_fn(
+        entity_id: EntityId,
+        flow_state: Entity<FlowState<T>>,
+        _bounds: Bounds<Pixels>,
+    ) -> impl Fn(&MouseUpEvent, DispatchPhase, &mut Window, &mut App) + use<T> {
+        move |_event, _, _window, cx| {
+            let mut changed = false;
+
+            flow_state.update(cx, |state, _| {
+                if state.selection_box.is_some() {
+                    state.selection_box = None;
+                    changed = true;
+                }
+                if let Some(draft) = state.connecting.take() {
+                    if let Some(snap) = draft.snap_target {
+                        // Complete the connection
+                        let (source, target, source_handle, target_handle) =
+                            if draft.from_type == HandleType::Source {
+                                (
+                                    draft.from_node.clone(),
+                                    snap.node_id.clone(),
+                                    draft.from_handle.clone(),
+                                    snap.handle_id.clone(),
+                                )
+                            } else {
+                                (
+                                    snap.node_id.clone(),
+                                    draft.from_node.clone(),
+                                    snap.handle_id.clone(),
+                                    draft.from_handle.clone(),
+                                )
+                            };
+
+                        let connection = Connection {
+                            source,
+                            target,
+                            source_handle,
+                            target_handle,
+                        };
+
+                        if state.is_valid_connection(&connection) {
+                            state.push_undo();
+                            let edge_id: SharedString =
+                                format!("e{}-{}", connection.source, connection.target).into();
+                            state.add_edge_from_connection(&connection, edge_id);
+                        }
+                    }
+                    // else: connection cancelled (no snap target)
+                    changed = true;
+                }
+                if state.drag_state.is_some() {
+                    state.drag_state = None;
+                    for n in &mut state.nodes {
+                        n.dragging = false;
+                    }
+                    changed = true;
+                }
+                if state.pan_drag.is_some() {
+                    state.pan_drag = None;
+                    changed = true;
+                }
+            });
+
+            if changed {
+                cx.notify(entity_id);
+            }
+        }
+    }
+
+    fn on_key_down_fn(
+        entity_id: EntityId,
+        flow_state: Entity<FlowState<T>>,
+        focus: FocusHandle,
+    ) -> impl Fn(&KeyDownEvent, &mut Window, &mut App) {
+        move |event: &KeyDownEvent, window, cx| {
+            let key: &str = event.keystroke.key.as_ref();
+
+            // Only handle destructive keys (delete/backspace) when the
+            // flow graph itself is focused — not when a child element
+            // (like an Input inside a node) has focus.
+            let graph_focused = focus.is_focused(window);
+
+            // Undo: Cmd+Z (always allowed)
+            if key == "z" && event.keystroke.modifiers.platform && !event.keystroke.modifiers.shift
+            {
+                flow_state.update(cx, |state, _| {
+                    state.undo();
+                });
+                cx.notify(entity_id);
+                return;
+            }
+            // Redo: Cmd+Shift+Z
+            if key == "z" && event.keystroke.modifiers.platform && event.keystroke.modifiers.shift {
+                flow_state.update(cx, |state, _| {
+                    state.redo();
+                });
+                cx.notify(entity_id);
+                return;
+            }
+
+            // Select all: Cmd+A
+            if key == "a" && event.keystroke.modifiers.platform && graph_focused {
+                flow_state.update(cx, |state, _| {
+                    state.select_all();
+                });
+                cx.notify(entity_id);
+                return;
+            }
+
+            if (key == "backspace" || key == "delete") && graph_focused {
+                flow_state.update(cx, |state, _| {
+                    state.push_undo();
+                    // Collect IDs of selected deletable nodes
+                    let node_ids_to_remove: Vec<NodeId> = state
+                        .nodes
+                        .iter()
+                        .filter(|n| n.selected && n.deletable)
+                        .map(|n| n.id.clone())
+                        .collect();
+
+                    // Remove edges connected to deleted nodes + selected edges
+                    state.edges.retain(|e| {
+                        let connected_to_removed = node_ids_to_remove.contains(&e.source)
+                            || node_ids_to_remove.contains(&e.target);
+                        let selected_and_deletable = e.selected && e.deletable;
+                        !connected_to_removed && !selected_and_deletable
+                    });
+
+                    // Remove selected nodes
+                    state.nodes.retain(|n| !node_ids_to_remove.contains(&n.id));
+                    if !node_ids_to_remove.is_empty() {
+                        state.rebuild_lookup();
+                    }
+                });
+                cx.notify(entity_id);
+            }
+        }
+    }
+    fn on_scroll_fn(
+        entity_id: EntityId,
+        state_for_scroll: Entity<FlowState<T>>,
+    ) -> impl Fn(&ScrollEvent, &mut Window, &mut App) {
+        move |event, _window, cx| {
+            let delta = event.delta.pixel_delta(px(20.0));
+            let mouse_pos = event.position;
+            if event.modifiers.platform || event.modifiers.control {
+                // Zoom towards mouse
+                let zoom_delta = -delta.y.as_f32() * 0.01;
+                state_for_scroll.update(cx, |state, _| {
+                    let old_zoom = state.viewport.zoom;
+                    let new_zoom = (old_zoom + zoom_delta).clamp(state.min_zoom, state.max_zoom);
+                    let mx = mouse_pos.x.as_f32();
+                    let my = mouse_pos.y.as_f32();
+                    state.viewport.x = mx - (mx - state.viewport.x) * (new_zoom / old_zoom);
+                    state.viewport.y = my - (my - state.viewport.y) * (new_zoom / old_zoom);
+                    state.viewport.zoom = new_zoom;
+                });
+            } else {
+                // Pan
+                state_for_scroll.update(cx, |state, _| {
+                    state.viewport.x += delta.x.as_f32();
+                    state.viewport.y += delta.y.as_f32();
+                });
+            }
+            cx.notify(entity_id);
+        }
+    }
+
+    fn on_pinch_fn(
+        entity_id: EntityId,
+        state_for_pinch: Entity<FlowState<T>>,
+    ) -> impl Fn(&PinchEvent, &mut Window, &mut App) {
+        move |event, _window, cx| {
+            let mouse_pos = event.position;
+            let zoom_delta = event.delta;
+            state_for_pinch.update(cx, |state, _| {
+                let old_zoom = state.viewport.zoom;
+                let new_zoom =
+                    (old_zoom * (1.0 + zoom_delta)).clamp(state.min_zoom, state.max_zoom);
+                let mx = mouse_pos.x.as_f32();
+                let my = mouse_pos.y.as_f32();
+                state.viewport.x = mx - (mx - state.viewport.x) * (new_zoom / old_zoom);
+                state.viewport.y = my - (my - state.viewport.y) * (new_zoom / old_zoom);
+                state.viewport.zoom = new_zoom;
+            });
+            cx.notify(entity_id);
         }
     }
 }
@@ -779,12 +1132,13 @@ impl<T: FlowDatum> Render for FlowGraph<T> {
         let bg_color = &self.bg_color;
         let grid_color = self.grid_color;
         let bg_pattern = self.bg_pattern;
-        let state_for_scroll = self.state.clone();
-        let state_for_mouse_down = self.state.clone();
-        let state_for_mouse_move = self.state.clone();
-        let state_for_mouse_up = self.state.clone();
-        let state_for_key = self.state.clone();
-        let state_for_pinch = self.state.clone();
+        let flow_state = self.state.clone();
+        // let state_for_scroll = self.state.clone();
+        // let state_for_mouse_down = self.state.clone();
+        // let state_for_mouse_move = self.state.clone();
+        // let state_for_mouse_up = self.state.clone();
+        // let state_for_key = self.state.clone();
+        // let state_for_pinch = self.state.clone();
 
         div()
             .id("flow-graph")
@@ -817,6 +1171,7 @@ impl<T: FlowDatum> Render for FlowGraph<T> {
 
                         // Paint draft connection line
                         if let Some(ref draft) = connecting_draft {
+                            // let bounds = Default::default();
                             Self::paint_connection_draft(&bounds, draft, window);
                         }
 
@@ -834,343 +1189,353 @@ impl<T: FlowDatum> Render for FlowGraph<T> {
             // Edge labels
             .children(edge_label_elements)
             // Mouse down on empty space → start panning, deselect, or edge selection
-            .on_mouse_down(MouseButton::Left, {
-                let entity_id = entity_id;
-                move |event, _window, cx| {
-                    let mouse_pos = event.position;
-                    state_for_mouse_down.update(cx, |state, _| {
-                        // If a node drag or connection was already started, skip
-                        if state.drag_state.is_some() || state.connecting.is_some() {
-                            return;
-                        }
-
-                        // Try edge hit testing
-                        let mx = mouse_pos.x.as_f32();
-                        let my = mouse_pos.y.as_f32();
-                        if let Some(edge_id) = edges::hit_test_edges(state, mx, my, 5.0) {
-                            if !event.modifiers.platform {
-                                for n in &mut state.nodes {
-                                    n.selected = false;
-                                }
-                                for e in &mut state.edges {
-                                    e.selected = false;
-                                }
-                            }
-                            if let Some(edge) = state.edges.iter_mut().find(|e| e.id == edge_id) {
-                                edge.selected = true;
-                            }
-                            return;
-                        }
-
-                        // Shift+drag → start box selection
-                        if event.modifiers.shift {
-                            if !event.modifiers.platform {
-                                for n in &mut state.nodes {
-                                    n.selected = false;
-                                }
-                                for e in &mut state.edges {
-                                    e.selected = false;
-                                }
-                            }
-                            state.selection_box = Some(SelectionBox {
-                                start: (mx, my),
-                                current: (mx, my),
-                            });
-                            return;
-                        }
-
-                        // Deselect all nodes and edges
-                        if !event.modifiers.platform {
-                            for n in &mut state.nodes {
-                                n.selected = false;
-                            }
-                            for e in &mut state.edges {
-                                e.selected = false;
-                            }
-                        }
-
-                        // Start pan drag
-                        state.pan_drag = Some(PanDragState {
-                            start_mouse: (mx, my),
-                            start_viewport: (state.viewport.x, state.viewport.y),
-                        });
-                    });
-                    cx.notify(entity_id);
-                }
-            })
-            // Global mouse move → handle dragging, panning, or connecting
-            .on_mouse_move({
-                let entity_id = entity_id;
-                move |event, _window, cx| {
-                    let mouse_pos = event.position;
-                    let mx = mouse_pos.x.as_f32();
-                    let my = mouse_pos.y.as_f32();
-
-                    let mut changed = false;
-
-                    state_for_mouse_move.update(cx, |state, _| {
-                        // Box selection
-                        if let Some(ref mut sel) = state.selection_box {
-                            sel.current = (mx, my);
-                            // Select nodes whose screen bounds intersect the box
-                            let (sx, sy, ex, ey) = (
-                                sel.start.0.min(sel.current.0),
-                                sel.start.1.min(sel.current.1),
-                                sel.start.0.max(sel.current.0),
-                                sel.start.1.max(sel.current.1),
-                            );
-                            let viewport = state.viewport;
-                            for node in &mut state.nodes {
-                                if node.hidden {
-                                    continue;
-                                }
-                                let (nx, ny) = viewport.flow_to_screen(node.position);
-                                let nw = node.measured_width.map(|p| p.as_f32()).unwrap_or(150.0);
-                                let nh = node.measured_height.map(|p| p.as_f32()).unwrap_or(40.0);
-                                // AABB intersection
-                                let intersects = nx < ex && nx + nw > sx && ny < ey && ny + nh > sy;
-                                node.selected = intersects;
-                            }
-                            changed = true;
-                        }
-                        // Connection dragging with snap-to-handle
-                        else if state.connecting.is_some() {
-                            // Clone draft to avoid borrow conflict with find_snap_target
-                            let mut draft = state.connecting.clone().unwrap();
-                            let snap = state.find_snap_target(&draft, mx, my);
-                            if let Some(ref target) = snap {
-                                draft.to_point = target.point;
-                            } else {
-                                draft.to_point = (mx, my);
-                            }
-                            draft.snap_target = snap;
-                            state.connecting = Some(draft);
-                            changed = true;
-                        }
-                        // Node dragging
-                        else if let Some(ref drag) = state.drag_state {
-                            let dx = (mx - drag.origin_mouse.0) / state.viewport.zoom;
-                            let dy = (my - drag.origin_mouse.1) / state.viewport.zoom;
-
-                            let origins = drag.node_origins.clone();
-                            let snap = state.snap_to_grid;
-                            let snap_grid = state.snap_grid;
-                            for (node_id, origin) in &origins {
-                                let mut new_x = origin.x + dx;
-                                let mut new_y = origin.y + dy;
-
-                                if snap {
-                                    let (gx, gy) = snap_grid;
-                                    new_x = (new_x / gx).round() * gx;
-                                    new_y = (new_y / gy).round() * gy;
-                                }
-
-                                if let Some(node) = state.get_node_mut(node_id) {
-                                    node.position = FlowPoint::new(new_x, new_y);
-                                }
-                            }
-                            changed = true;
-                        }
-                        // Canvas panning
-                        else if let Some(pan) = state.pan_drag {
-                            state.viewport.x = pan.start_viewport.0 + (mx - pan.start_mouse.0);
-                            state.viewport.y = pan.start_viewport.1 + (my - pan.start_mouse.1);
-                            changed = true;
-                        }
-                    });
-
-                    if changed {
-                        cx.notify(entity_id);
+            .child(
+                canvas(|_, _, _| (), {
+                    let flow_state = flow_state.clone();
+                    move |bounds, _, window, _cx| {
+                        window.on_mouse_event(Self::on_mouse_down_fn(
+                            entity_id.clone(),
+                            flow_state.clone(),
+                            bounds,
+                        ));
+                        window.on_mouse_event(Self::on_mouse_move_fn(
+                            entity_id.clone(),
+                            flow_state.clone(),
+                            bounds,
+                        ));
+                        window.on_mouse_event(Self::on_mouse_up_fn(
+                            entity_id.clone(),
+                            flow_state.clone(),
+                            bounds,
+                        ));
                     }
-                }
-            })
-            // Global mouse up → end dragging, panning, or cancel connection
-            .on_mouse_up(MouseButton::Left, {
-                let entity_id = entity_id;
-                move |_event, _window, cx| {
-                    let mut changed = false;
-
-                    state_for_mouse_up.update(cx, |state, _| {
-                        if state.selection_box.is_some() {
-                            state.selection_box = None;
-                            changed = true;
-                        }
-                        if let Some(draft) = state.connecting.take() {
-                            if let Some(snap) = draft.snap_target {
-                                // Complete the connection
-                                let (source, target, source_handle, target_handle) =
-                                    if draft.from_type == HandleType::Source {
-                                        (
-                                            draft.from_node.clone(),
-                                            snap.node_id.clone(),
-                                            draft.from_handle.clone(),
-                                            snap.handle_id.clone(),
-                                        )
-                                    } else {
-                                        (
-                                            snap.node_id.clone(),
-                                            draft.from_node.clone(),
-                                            snap.handle_id.clone(),
-                                            draft.from_handle.clone(),
-                                        )
-                                    };
-
-                                let connection = Connection {
-                                    source,
-                                    target,
-                                    source_handle,
-                                    target_handle,
-                                };
-
-                                if state.is_valid_connection(&connection) {
-                                    state.push_undo();
-                                    let edge_id: SharedString =
-                                        format!("e{}-{}", connection.source, connection.target)
-                                            .into();
-                                    state.add_edge_from_connection(&connection, edge_id);
-                                }
-                            }
-                            // else: connection cancelled (no snap target)
-                            changed = true;
-                        }
-                        if state.drag_state.is_some() {
-                            state.drag_state = None;
-                            for n in &mut state.nodes {
-                                n.dragging = false;
-                            }
-                            changed = true;
-                        }
-                        if state.pan_drag.is_some() {
-                            state.pan_drag = None;
-                            changed = true;
-                        }
-                    });
-
-                    if changed {
-                        cx.notify(entity_id);
-                    }
-                }
-            })
-            // Keyboard shortcuts (delete, undo/redo)
-            .on_key_down({
-                let entity_id = entity_id;
-                let focus = self.focus_handle.clone();
-                move |event: &KeyDownEvent, window, cx| {
-                    let key: &str = event.keystroke.key.as_ref();
-
-                    // Only handle destructive keys (delete/backspace) when the
-                    // flow graph itself is focused — not when a child element
-                    // (like an Input inside a node) has focus.
-                    let graph_focused = focus.is_focused(window);
-
-                    // Undo: Cmd+Z (always allowed)
-                    if key == "z"
-                        && event.keystroke.modifiers.platform
-                        && !event.keystroke.modifiers.shift
-                    {
-                        state_for_key.update(cx, |state, _| {
-                            state.undo();
-                        });
-                        cx.notify(entity_id);
-                        return;
-                    }
-                    // Redo: Cmd+Shift+Z
-                    if key == "z"
-                        && event.keystroke.modifiers.platform
-                        && event.keystroke.modifiers.shift
-                    {
-                        state_for_key.update(cx, |state, _| {
-                            state.redo();
-                        });
-                        cx.notify(entity_id);
-                        return;
-                    }
-
-                    // Select all: Cmd+A
-                    if key == "a" && event.keystroke.modifiers.platform && graph_focused {
-                        state_for_key.update(cx, |state, _| {
-                            state.select_all();
-                        });
-                        cx.notify(entity_id);
-                        return;
-                    }
-
-                    if (key == "backspace" || key == "delete") && graph_focused {
-                        state_for_key.update(cx, |state, _| {
-                            state.push_undo();
-                            // Collect IDs of selected deletable nodes
-                            let node_ids_to_remove: Vec<NodeId> = state
-                                .nodes
-                                .iter()
-                                .filter(|n| n.selected && n.deletable)
-                                .map(|n| n.id.clone())
-                                .collect();
-
-                            // Remove edges connected to deleted nodes + selected edges
-                            state.edges.retain(|e| {
-                                let connected_to_removed = node_ids_to_remove.contains(&e.source)
-                                    || node_ids_to_remove.contains(&e.target);
-                                let selected_and_deletable = e.selected && e.deletable;
-                                !connected_to_removed && !selected_and_deletable
-                            });
-
-                            // Remove selected nodes
-                            state.nodes.retain(|n| !node_ids_to_remove.contains(&n.id));
-                            if !node_ids_to_remove.is_empty() {
-                                state.rebuild_lookup();
-                            }
-                        });
-                        cx.notify(entity_id);
-                    }
-                }
-            })
-            // Scroll to zoom / pan
-            .on_scroll({
-                move |event, _window, cx| {
-                    let delta = event.delta.pixel_delta(px(20.0));
-                    let mouse_pos = event.position;
-
-                    if event.modifiers.platform || event.modifiers.control {
-                        // Zoom towards mouse
-                        let zoom_delta = -delta.y.as_f32() * 0.01;
-                        state_for_scroll.update(cx, |state, _| {
-                            let old_zoom = state.viewport.zoom;
-                            let new_zoom =
-                                (old_zoom + zoom_delta).clamp(state.min_zoom, state.max_zoom);
-                            let mx = mouse_pos.x.as_f32();
-                            let my = mouse_pos.y.as_f32();
-                            state.viewport.x = mx - (mx - state.viewport.x) * (new_zoom / old_zoom);
-                            state.viewport.y = my - (my - state.viewport.y) * (new_zoom / old_zoom);
-                            state.viewport.zoom = new_zoom;
-                        });
-                    } else {
-                        // Pan
-                        state_for_scroll.update(cx, |state, _| {
-                            state.viewport.x += delta.x.as_f32();
-                            state.viewport.y += delta.y.as_f32();
-                        });
-                    }
-
-                    cx.notify(entity_id);
-                }
-            })
-            // Pinch to zoom (macOS trackpad / Linux Wayland)
-            .on_pinch({
-                move |event, _window, cx| {
-                    let mouse_pos = event.position;
-                    let zoom_delta = event.delta;
-                    state_for_pinch.update(cx, |state, _| {
-                        let old_zoom = state.viewport.zoom;
-                        let new_zoom =
-                            (old_zoom * (1.0 + zoom_delta)).clamp(state.min_zoom, state.max_zoom);
-                        let mx = mouse_pos.x.as_f32();
-                        let my = mouse_pos.y.as_f32();
-                        state.viewport.x = mx - (mx - state.viewport.x) * (new_zoom / old_zoom);
-                        state.viewport.y = my - (my - state.viewport.y) * (new_zoom / old_zoom);
-                        state.viewport.zoom = new_zoom;
-                    });
-                    cx.notify(entity_id);
-                }
-            })
+                })
+                .absolute()
+                .size_full(),
+            )
+            .on_key_down(Self::on_key_down_fn(
+                entity_id.clone(),
+                flow_state.clone(),
+                self.focus_handle.clone(),
+            ))
+            .on_scroll(Self::on_scroll_fn(entity_id.clone(), flow_state.clone()))
+            .on_pinch(Self::on_pinch_fn(entity_id.clone(), flow_state.clone()))
+        // .on_mouse_down(MouseButton::Left, {
+        //     let entity_id = entity_id;
+        //     move |event, _window, cx| {
+        //         let mouse_pos = event.position;
+        //         state_for_mouse_down.update(cx, |state, _| {
+        //             // If a node drag or connection was already started, skip
+        //             if state.drag_state.is_some() || state.connecting.is_some() {
+        //                 return;
+        //             }
+        //             // Try edge hit testing
+        //             let mx = mouse_pos.x.as_f32();
+        //             let my = mouse_pos.y.as_f32();
+        //             if let Some(edge_id) = edges::hit_test_edges(state, mx, my, 5.0) {
+        //                 println!("mouse=({mx}, {my}), hit={edge_id:?}");
+        //                 if !event.modifiers.platform {
+        //                     for n in &mut state.nodes {
+        //                         n.selected = false;
+        //                     }
+        //                     for e in &mut state.edges {
+        //                         e.selected = false;
+        //                     }
+        //                 }
+        //                 if let Some(edge) = state.edges.iter_mut().find(|e| e.id == edge_id) {
+        //                     edge.selected = true;
+        //                 }
+        //                 return;
+        //             }
+        //             // Shift+drag → start box selection
+        //             if event.modifiers.shift {
+        //                 if !event.modifiers.platform {
+        //                     for n in &mut state.nodes {
+        //                         n.selected = false;
+        //                     }
+        //                     for e in &mut state.edges {
+        //                         e.selected = false;
+        //                     }
+        //                 }
+        //                 state.selection_box = Some(SelectionBox {
+        //                     start: (mx, my),
+        //                     current: (mx, my),
+        //                 });
+        //                 return;
+        //             }
+        //             // Deselect all nodes and edges
+        //             if !event.modifiers.platform {
+        //                 for n in &mut state.nodes {
+        //                     n.selected = false;
+        //                 }
+        //                 for e in &mut state.edges {
+        //                     e.selected = false;
+        //                 }
+        //             }
+        //             // Start pan drag
+        //             state.pan_drag = Some(PanDragState {
+        //                 start_mouse: (mx, my),
+        //                 start_viewport: (state.viewport.x, state.viewport.y),
+        //             });
+        //         });
+        //         cx.notify(entity_id);
+        //     }
+        // })
+        // Global mouse move → handle dragging, panning, or connecting
+        // .on_mouse_move({
+        //     let entity_id = entity_id;
+        //     move |event, _window, cx| {
+        //         let mouse_pos = event.position;
+        //         let mx = mouse_pos.x.as_f32();
+        //         let my = mouse_pos.y.as_f32();
+        //         let mut changed = false;
+        //         state_for_mouse_move.update(cx, |state, _| {
+        //             // Box selection
+        //             if let Some(ref mut sel) = state.selection_box {
+        //                 sel.current = (mx, my);
+        //                 // Select nodes whose screen bounds intersect the box
+        //                 let (sx, sy, ex, ey) = (
+        //                     sel.start.0.min(sel.current.0),
+        //                     sel.start.1.min(sel.current.1),
+        //                     sel.start.0.max(sel.current.0),
+        //                     sel.start.1.max(sel.current.1),
+        //                 );
+        //                 let viewport = state.viewport;
+        //                 for node in &mut state.nodes {
+        //                     if node.hidden {
+        //                         continue;
+        //                     }
+        //                     let (nx, ny) = viewport.flow_to_screen(node.position);
+        //                     let nw = node.measured_width.map(|p| p.as_f32()).unwrap_or(150.0);
+        //                     let nh = node.measured_height.map(|p| p.as_f32()).unwrap_or(40.0);
+        //                     // AABB intersection
+        //                     let intersects = nx < ex && nx + nw > sx && ny < ey && ny + nh > sy;
+        //                     node.selected = intersects;
+        //                 }
+        //                 changed = true;
+        //             }
+        //             // Connection dragging with snap-to-handle
+        //             else if state.connecting.is_some() {
+        //                 // Clone draft to avoid borrow conflict with find_snap_target
+        //                 let mut draft = state.connecting.clone().unwrap();
+        //                 let snap = state.find_snap_target(&draft, mx, my);
+        //                 if let Some(ref target) = snap {
+        //                     draft.to_point = target.point;
+        //                 } else {
+        //                     draft.to_point = (mx, my);
+        //                 }
+        //                 draft.snap_target = snap;
+        //                 state.connecting = Some(draft);
+        //                 changed = true;
+        //             }
+        //             // Node dragging
+        //             else if let Some(ref drag) = state.drag_state {
+        //                 let dx = (mx - drag.origin_mouse.0) / state.viewport.zoom;
+        //                 let dy = (my - drag.origin_mouse.1) / state.viewport.zoom;
+        //                 let origins = drag.node_origins.clone();
+        //                 let snap = state.snap_to_grid;
+        //                 let snap_grid = state.snap_grid;
+        //                 for (node_id, origin) in &origins {
+        //                     let mut new_x = origin.x + dx;
+        //                     let mut new_y = origin.y + dy;
+        //                     if snap {
+        //                         let (gx, gy) = snap_grid;
+        //                         new_x = (new_x / gx).round() * gx;
+        //                         new_y = (new_y / gy).round() * gy;
+        //                     }
+        //                     if let Some(node) = state.get_node_mut(node_id) {
+        //                         node.position = FlowPoint::new(new_x, new_y);
+        //                     }
+        //                 }
+        //                 changed = true;
+        //             }
+        //             // Canvas panning
+        //             else if let Some(pan) = state.pan_drag {
+        //                 state.viewport.x = pan.start_viewport.0 + (mx - pan.start_mouse.0);
+        //                 state.viewport.y = pan.start_viewport.1 + (my - pan.start_mouse.1);
+        //                 changed = true;
+        //             }
+        //         });
+        //         if changed {
+        //             cx.notify(entity_id);
+        //         }
+        //     }
+        // })
+        // Global mouse up → end dragging, panning, or cancel connection
+        // .on_mouse_up(MouseButton::Left, {
+        //     let entity_id = entity_id;
+        //     move |_event, _window, cx| {
+        //         let mut changed = false;
+        //         state_for_mouse_up.update(cx, |state, _| {
+        //             if state.selection_box.is_some() {
+        //                 state.selection_box = None;
+        //                 changed = true;
+        //             }
+        //             if let Some(draft) = state.connecting.take() {
+        //                 if let Some(snap) = draft.snap_target {
+        //                     // Complete the connection
+        //                     let (source, target, source_handle, target_handle) =
+        //                         if draft.from_type == HandleType::Source {
+        //                             (
+        //                                 draft.from_node.clone(),
+        //                                 snap.node_id.clone(),
+        //                                 draft.from_handle.clone(),
+        //                                 snap.handle_id.clone(),
+        //                             )
+        //                         } else {
+        //                             (
+        //                                 snap.node_id.clone(),
+        //                                 draft.from_node.clone(),
+        //                                 snap.handle_id.clone(),
+        //                                 draft.from_handle.clone(),
+        //                             )
+        //                         };
+        //                     let connection = Connection {
+        //                         source,
+        //                         target,
+        //                         source_handle,
+        //                         target_handle,
+        //                     };
+        //                     if state.is_valid_connection(&connection) {
+        //                         state.push_undo();
+        //                         let edge_id: SharedString =
+        //                             format!("e{}-{}", connection.source, connection.target)
+        //                                 .into();
+        //                         state.add_edge_from_connection(&connection, edge_id);
+        //                     }
+        //                 }
+        //                 // else: connection cancelled (no snap target)
+        //                 changed = true;
+        //             }
+        //             if state.drag_state.is_some() {
+        //                 state.drag_state = None;
+        //                 for n in &mut state.nodes {
+        //                     n.dragging = false;
+        //                 }
+        //                 changed = true;
+        //             }
+        //             if state.pan_drag.is_some() {
+        //                 state.pan_drag = None;
+        //                 changed = true;
+        //             }
+        //         });
+        //         if changed {
+        //             cx.notify(entity_id);
+        //         }
+        //     }
+        // })
+        // Keyboard shortcuts (delete, undo/redo)
+        // .on_key_down({
+        //     let entity_id = entity_id;
+        //     let focus = self.focus_handle.clone();
+        //     move |event: &KeyDownEvent, window, cx| {
+        //         let key: &str = event.keystroke.key.as_ref();
+        //         // Only handle destructive keys (delete/backspace) when the
+        //         // flow graph itself is focused — not when a child element
+        //         // (like an Input inside a node) has focus.
+        //         let graph_focused = focus.is_focused(window);
+        //         // Undo: Cmd+Z (always allowed)
+        //         if key == "z"
+        //             && event.keystroke.modifiers.platform
+        //             && !event.keystroke.modifiers.shift
+        //         {
+        //             state_for_key.update(cx, |state, _| {
+        //                 state.undo();
+        //             });
+        //             cx.notify(entity_id);
+        //             return;
+        //         }
+        //         // Redo: Cmd+Shift+Z
+        //         if key == "z"
+        //             && event.keystroke.modifiers.platform
+        //             && event.keystroke.modifiers.shift
+        //         {
+        //             state_for_key.update(cx, |state, _| {
+        //                 state.redo();
+        //             });
+        //             cx.notify(entity_id);
+        //             return;
+        //         }
+        //         // Select all: Cmd+A
+        //         if key == "a" && event.keystroke.modifiers.platform && graph_focused {
+        //             state_for_key.update(cx, |state, _| {
+        //                 state.select_all();
+        //             });
+        //             cx.notify(entity_id);
+        //             return;
+        //         }
+        //         if (key == "backspace" || key == "delete") && graph_focused {
+        //             state_for_key.update(cx, |state, _| {
+        //                 state.push_undo();
+        //                 // Collect IDs of selected deletable nodes
+        //                 let node_ids_to_remove: Vec<NodeId> = state
+        //                     .nodes
+        //                     .iter()
+        //                     .filter(|n| n.selected && n.deletable)
+        //                     .map(|n| n.id.clone())
+        //                     .collect();
+        //                 // Remove edges connected to deleted nodes + selected edges
+        //                 state.edges.retain(|e| {
+        //                     let connected_to_removed = node_ids_to_remove.contains(&e.source)
+        //                         || node_ids_to_remove.contains(&e.target);
+        //                     let selected_and_deletable = e.selected && e.deletable;
+        //                     !connected_to_removed && !selected_and_deletable
+        //                 });
+        //                 // Remove selected nodes
+        //                 state.nodes.retain(|n| !node_ids_to_remove.contains(&n.id));
+        //                 if !node_ids_to_remove.is_empty() {
+        //                     state.rebuild_lookup();
+        //                 }
+        //             });
+        //             cx.notify(entity_id);
+        //         }
+        //     }
+        // })
+        // // Scroll to zoom / pan
+        // .on_scroll({
+        //     move |event, _window, cx| {
+        //         let delta = event.delta.pixel_delta(px(20.0));
+        //         let mouse_pos = event.position;
+        //         if event.modifiers.platform || event.modifiers.control {
+        //             // Zoom towards mouse
+        //             let zoom_delta = -delta.y.as_f32() * 0.01;
+        //             state_for_scroll.update(cx, |state, _| {
+        //                 let old_zoom = state.viewport.zoom;
+        //                 let new_zoom =
+        //                     (old_zoom + zoom_delta).clamp(state.min_zoom, state.max_zoom);
+        //                 let mx = mouse_pos.x.as_f32();
+        //                 let my = mouse_pos.y.as_f32();
+        //                 state.viewport.x = mx - (mx - state.viewport.x) * (new_zoom / old_zoom);
+        //                 state.viewport.y = my - (my - state.viewport.y) * (new_zoom / old_zoom);
+        //                 state.viewport.zoom = new_zoom;
+        //             });
+        //         } else {
+        //             // Pan
+        //             state_for_scroll.update(cx, |state, _| {
+        //                 state.viewport.x += delta.x.as_f32();
+        //                 state.viewport.y += delta.y.as_f32();
+        //             });
+        //         }
+        //         cx.notify(entity_id);
+        //     }
+        // })
+        // Pinch to zoom (macOS trackpad / Linux Wayland)
+        // .on_pinch({
+        //     move |event, _window, cx| {
+        //         let mouse_pos = event.position;
+        //         let zoom_delta = event.delta;
+        //         state_for_pinch.update(cx, |state, _| {
+        //             let old_zoom = state.viewport.zoom;
+        //             let new_zoom =
+        //                 (old_zoom * (1.0 + zoom_delta)).clamp(state.min_zoom, state.max_zoom);
+        //             let mx = mouse_pos.x.as_f32();
+        //             let my = mouse_pos.y.as_f32();
+        //             state.viewport.x = mx - (mx - state.viewport.x) * (new_zoom / old_zoom);
+        //             state.viewport.y = my - (my - state.viewport.y) * (new_zoom / old_zoom);
+        //             state.viewport.zoom = new_zoom;
+        //         });
+        //         cx.notify(entity_id);
+        //     }
+        // })
     }
 }
