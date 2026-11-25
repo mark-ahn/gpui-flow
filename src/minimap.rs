@@ -14,6 +14,7 @@ pub struct Minimap<T: FlowDatum> {
     state: Entity<FlowState<T>>,
     /// Container bounds captured during rendering (for viewport calculations).
     container_bounds: Option<(f32, f32)>,
+    dragging: bool,
 }
 
 impl<T: FlowDatum> Minimap<T> {
@@ -21,6 +22,7 @@ impl<T: FlowDatum> Minimap<T> {
         Self {
             state,
             container_bounds: None,
+            dragging: false,
         }
     }
 
@@ -37,6 +39,7 @@ impl<T: FlowDatum> Render for Minimap<T> {
         let state_for_mouse = self.state.clone();
         let entity_id = cx.entity_id();
         let container = self.container_bounds.unwrap_or((900.0, 600.0));
+        let view = cx.entity();
 
         div()
             .id("flow-minimap")
@@ -53,32 +56,104 @@ impl<T: FlowDatum> Render for Minimap<T> {
                     move |bounds, _: (), window, cx| {
                         let state = state_for_canvas.read(cx);
                         paint_minimap(&bounds, state, container, window);
+
+                        window.on_mouse_event({
+                            let state = state_for_mouse.clone();
+                            let view = view.clone();
+                            // let entity_id = entity_id;
+
+                            move |event: &MouseDownEvent, phase, _window, cx| {
+                                if !phase.bubble() {
+                                    return;
+                                }
+                                if event.button != MouseButton::Left
+                                    || !bounds.contains(&event.position)
+                                {
+                                    return;
+                                }
+                                cx.stop_propagation();
+
+                                let position = event.position - bounds.origin;
+                                let mx = position.x.as_f32();
+                                let my = position.y.as_f32();
+                                pan_to_minimap_point(&state, mx, my, container, cx);
+
+                                view.update(cx, |view, cx| {
+                                    view.dragging = true;
+                                    cx.notify();
+                                });
+
+                                // cx.notify(entity_id);
+                            }
+                        });
+                        window.on_mouse_event({
+                            let state = state_for_mouse.clone();
+                            let entity_id = entity_id;
+                            let view = view.clone();
+                            move |event: &MouseMoveEvent, phase, _window, cx| {
+                                if !phase.bubble() {
+                                    return;
+                                }
+                                if event.pressed_button != Some(MouseButton::Left) {
+                                    return;
+                                }
+                                if !view.read(cx).dragging {
+                                    return;
+                                }
+                                cx.stop_propagation();
+
+                                let position = event.position - bounds.origin;
+                                let mx = position.x.as_f32();
+                                let my = position.y.as_f32();
+                                pan_to_minimap_point(&state, mx, my, container, cx);
+                                cx.notify(entity_id);
+                            }
+                        });
+                        window.on_mouse_event({
+                            let view = view.clone();
+
+                            move |event: &MouseUpEvent, phase, _window, cx| {
+                                if !phase.bubble() {
+                                    return;
+                                }
+                                if event.button != MouseButton::Left
+                                    || !bounds.contains(&event.position)
+                                {
+                                    return;
+                                }
+                                cx.stop_propagation();
+
+                                view.update(cx, |view, _cx| {
+                                    view.dragging = false;
+                                });
+                            }
+                        });
                     },
                 )
                 .size_full(),
             )
-            .on_mouse_down(MouseButton::Left, {
-                let state = state_for_mouse.clone();
-                let entity_id = entity_id;
-                move |event, _window, cx| {
-                    let mx = event.position.x.as_f32();
-                    let my = event.position.y.as_f32();
-                    pan_to_minimap_point(&state, mx, my, container, cx);
-                    cx.notify(entity_id);
-                }
-            })
-            .on_mouse_move({
-                let state = state_for_mouse.clone();
-                let entity_id = entity_id;
-                move |event, _window, cx| {
-                    if event.pressed_button == Some(MouseButton::Left) {
-                        let mx = event.position.x.as_f32();
-                        let my = event.position.y.as_f32();
-                        pan_to_minimap_point(&state, mx, my, container, cx);
-                        cx.notify(entity_id);
-                    }
-                }
-            })
+        // .on_mouse_down(MouseButton::Left, {
+        //     let state = state_for_mouse.clone();
+        //     let entity_id = entity_id;
+        //     move |event, _window, cx| {
+        //         let mx = event.position.x.as_f32();
+        //         let my = event.position.y.as_f32();
+        //         pan_to_minimap_point(&state, mx, my, container, cx);
+        //         cx.notify(entity_id);
+        //     }
+        // })
+        // .on_mouse_move({
+        //     let state = state_for_mouse.clone();
+        //     let entity_id = entity_id;
+        //     move |event, _window, cx| {
+        //         if event.pressed_button == Some(MouseButton::Left) {
+        //             let mx = event.position.x.as_f32();
+        //             let my = event.position.y.as_f32();
+        //             pan_to_minimap_point(&state, mx, my, container, cx);
+        //             cx.notify(entity_id);
+        //         }
+        //     }
+        // })
     }
 }
 
@@ -95,6 +170,9 @@ fn pan_to_minimap_point<T: FlowDatum>(
         if graph_bounds.2 <= 0.0 || graph_bounds.3 <= 0.0 {
             return;
         }
+        // println!("mouse={:?}", (mx, my));
+        // println!("container={:?}", container);
+        // println!("graph-bounds={:?}", graph_bounds);
 
         let inner_w = MINIMAP_WIDTH - MINIMAP_PADDING * 2.0;
         let inner_h = MINIMAP_HEIGHT - MINIMAP_PADDING * 2.0;
@@ -112,9 +190,12 @@ fn pan_to_minimap_point<T: FlowDatum>(
         let flow_x = (mx - offset_x) / scale + graph_bounds.0;
         let flow_y = (my - offset_y) / scale + graph_bounds.1;
 
+        // println!("offset={:?}", (offset_x, offset_y));
+        // println!("flow-point={:?}", (flow_x, flow_y));
         // Center viewport on this flow point
         state.viewport.x = container.0 / 2.0 - flow_x * state.viewport.zoom;
         state.viewport.y = container.1 / 2.0 - flow_y * state.viewport.zoom;
+        // println!("viewport={:?}", state.viewport);
     });
 }
 

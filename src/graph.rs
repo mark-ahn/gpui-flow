@@ -669,6 +669,9 @@ impl<T: FlowDatum> FlowGraph<T> {
             if !phase.bubble() {
                 return;
             }
+            if !bounds.contains(&event.position) {
+                return;
+            }
 
             let mouse_pos = event.position - bounds.origin;
             flow_state.update(cx, |state, _| {
